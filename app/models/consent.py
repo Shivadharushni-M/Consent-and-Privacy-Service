@@ -21,9 +21,21 @@ from app.db.types import GUID
 
 class PurposeEnum(str, enum.Enum):
     ANALYTICS = "analytics"
+    ADS = "ads"
+    EMAIL = "email"
+    LOCATION = "location"
     MARKETING = "marketing"
     PERSONALIZATION = "personalization"
     DATA_SHARING = "data_sharing"
+
+
+class EventNameEnum(str, enum.Enum):
+    PAGE_VIEW = "page_view"
+    PURCHASE = "purchase"
+    SIGNUP = "signup"
+    AD_CLICK = "ad_click"
+    NEWSLETTER_OPEN = "newsletter_open"
+    LOCATION_PING = "location_ping"
 
 
 class StatusEnum(str, enum.Enum):

@@ -1,6 +1,7 @@
 from app.models.audit import AuditLog
 from app.models.consent import (
     ConsentHistory,
+    EventNameEnum,
     PurposeEnum,
     RegionEnum,
     RequestStatusEnum,
@@ -15,6 +16,7 @@ from app.models.consent import (
 __all__ = [
     "AuditLog",
     "ConsentHistory",
+    "EventNameEnum",
     "PurposeEnum",
     "RegionEnum",
     "RequestStatusEnum",

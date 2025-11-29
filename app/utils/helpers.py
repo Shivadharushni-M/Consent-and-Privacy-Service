@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from typing import Union
 
+from fastapi import Request
+
 from app.models.consent import PurposeEnum, RegionEnum
 
 
@@ -28,3 +30,14 @@ def validate_region(region: Union[str, RegionEnum]) -> RegionEnum:
         return RegionEnum(region)
     except ValueError as exc:
         raise ValueError("invalid_region") from exc
+
+
+def extract_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        first_ip = forwarded_for.split(",")[0].strip()
+        if first_ip:
+            return first_ip
+    if request.client and request.client.host:
+        return request.client.host
+    return ""

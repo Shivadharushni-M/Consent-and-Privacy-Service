@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routes import consent, decision, preferences, region, users
+from app.routes import consent, decision, events, preferences, region, users
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(preferences.router)
     app.include_router(region.router)
     app.include_router(decision.router)
+    app.include_router(events.router)
     
     @app.get("/")
     def root():
