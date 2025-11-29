@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import consent, region, users
+from app.routes import consent, preferences, region, users
 from app.config import settings
 
 def create_app() -> FastAPI:
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
     
     app.include_router(users.router)
     app.include_router(consent.router)
+    app.include_router(preferences.router)
     app.include_router(region.router)
     
     @app.get("/")
