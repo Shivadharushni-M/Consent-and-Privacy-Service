@@ -11,8 +11,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.db.database import Base
-from app.models.consent import ConsentHistory
-from app.models.audit import AuditLog
+from app import models  # noqa: F401
 
 target_metadata = Base.metadata
 
