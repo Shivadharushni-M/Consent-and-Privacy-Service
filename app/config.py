@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DEBUG: bool = False
+    MAXMIND_ACCOUNT_ID: Optional[str] = None
+    MAXMIND_LICENSE_KEY: Optional[str] = None
     
     model_config = SettingsConfigDict(
         env_file=".env",

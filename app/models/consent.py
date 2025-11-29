@@ -35,6 +35,8 @@ class StatusEnum(str, enum.Enum):
 class RegionEnum(str, enum.Enum):
     EU = "EU"
     US = "US"
+    INDIA = "INDIA"
+    ROW = "ROW"
     IN = "IN"
     BR = "BR"
     SG = "SG"
