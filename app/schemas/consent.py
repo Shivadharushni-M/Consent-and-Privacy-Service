@@ -1,22 +1,93 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.models.consent import (
+    PurposeEnum,
+    RegionEnum,
+    RequestStatusEnum,
+    RequestTypeEnum,
+    RetentionEntityEnum,
+    StatusEnum,
+)
+
 
 class CreateConsentRequest(BaseModel):
-    user_id: int = Field(..., gt=0)
-    purpose: str = Field(..., min_length=1, max_length=50)
-    region: str = Field(..., min_length=2, max_length=50)
-    policy_snapshot: Optional[Dict[str, Any]] = None
+    user_id: UUID
+    purpose: PurposeEnum
+    region: RegionEnum
+    expires_at: Optional[datetime] = None
+    expires_in_days: Optional[int] = Field(None, gt=0, description="Number of days until consent expires")
+
+    @model_validator(mode="after")
+    def validate_expiry(self):
+        """Ensure only one expiry method is provided."""
+        if self.expires_at and self.expires_in_days:
+            raise ValueError("Cannot specify both expires_at and expires_in_days")
+        return self
+
+    def get_expires_at(self) -> Optional[datetime]:
+        """Calculate expires_at from expires_in_days if provided."""
+        if self.expires_at:
+            return self.expires_at
+        if self.expires_in_days:
+            from app.utils.helpers import get_utc_now
+            return get_utc_now() + timedelta(days=self.expires_in_days)
+        return None
+
 
 class ConsentResponse(BaseModel):
-    id: int
-    user_id: int
-    purpose: str
-    status: str
-    region: str
-    timestamp: datetime
-    policy_snapshot: Optional[Dict[str, Any]]
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
+    id: UUID
+    user_id: UUID
+    purpose: PurposeEnum
+    status: StatusEnum
+    region: RegionEnum
+    timestamp: datetime
+    expires_at: Optional[datetime] = None
+    policy_snapshot: Optional[Dict[str, Any]] = None
+
+
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: Optional[UUID] = None
+    action: str
+    details: Dict[str, Any]
+    created_at: datetime
+    policy_snapshot: Optional[Dict[str, Any]] = None
+
+
+class RetentionScheduleCreate(BaseModel):
+    entity_type: RetentionEntityEnum
+    retention_days: int = Field(..., gt=0)
+    active: bool = True
+
+
+class RetentionScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    entity_type: RetentionEntityEnum
+    retention_days: int
+    active: bool
+
+
+class SubjectRequestCreate(BaseModel):
+    user_id: UUID
+    request_type: RequestTypeEnum
+
+
+class SubjectRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    request_type: RequestTypeEnum
+    status: RequestStatusEnum
+    requested_at: datetime
+    completed_at: Optional[datetime]

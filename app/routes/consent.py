@@ -1,38 +1,67 @@
+from typing import List
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-from app.db.database import get_db
-from app.schemas.consent import CreateConsentRequest, ConsentResponse
-from app.services import consent_service
 
-router = APIRouter(prefix="/consent", tags=["consent"])
+from app.db.database import get_db
+from app.schemas.consent import ConsentResponse, CreateConsentRequest
+from app.services import consent_service
+from app.utils.security import api_key_auth
+
+router = APIRouter(
+    prefix="/consent",
+    tags=["consent"],
+    dependencies=[Depends(api_key_auth)],
+)
+
+
+def _handle_service_errors(exc: Exception) -> None:
+    error_str = str(exc)
+    if error_str == "user_not_found":
+        raise HTTPException(status_code=404, detail="User not found") from exc
+    if error_str == "invalid_region":
+        raise HTTPException(status_code=422, detail="Invalid region") from exc
+    if error_str == "database_error":
+        raise HTTPException(status_code=500, detail="Database error occurred") from exc
+    # For other ValueError exceptions, use the message
+    if isinstance(exc, ValueError):
+        raise HTTPException(status_code=400, detail=error_str) from exc
+    # For any other exception, return a generic error
+    raise HTTPException(status_code=500, detail=f"Internal server error: {error_str}") from exc
+
 
 @router.post("/grant", response_model=ConsentResponse, status_code=201)
 def grant_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
-    consent = consent_service.grant_consent(
-        db=db,
-        user_id=request.user_id,
-        purpose=request.purpose,
-        region=request.region,
-        policy_snapshot=request.policy_snapshot
-    )
-    return consent
+    try:
+        return consent_service.grant_consent(
+            db=db,
+            user_id=request.user_id,
+            purpose=request.purpose,
+            region=request.region,
+            expires_at=request.get_expires_at(),
+        )
+    except Exception as exc:
+        _handle_service_errors(exc)
+
 
 @router.post("/revoke", response_model=ConsentResponse, status_code=201)
 def revoke_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
-    consent = consent_service.revoke_consent(
-        db=db,
-        user_id=request.user_id,
-        purpose=request.purpose,
-        region=request.region,
-        policy_snapshot=request.policy_snapshot
-    )
-    return consent
+    try:
+        return consent_service.revoke_consent(
+            db=db,
+            user_id=request.user_id,
+            purpose=request.purpose,
+            region=request.region,
+            expires_at=request.get_expires_at(),
+        )
+    except Exception as exc:
+        _handle_service_errors(exc)
+
 
 @router.get("/history/{user_id}", response_model=List[ConsentResponse])
-def get_consent_history(user_id: int, db: Session = Depends(get_db)):
-    if user_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
-    history = consent_service.get_history(db=db, user_id=user_id)
-    return history
-
+def get_consent_history(user_id: UUID, db: Session = Depends(get_db)):
+    try:
+        return consent_service.get_history(db=db, user_id=user_id)
+    except Exception as exc:
+        _handle_service_errors(exc)
