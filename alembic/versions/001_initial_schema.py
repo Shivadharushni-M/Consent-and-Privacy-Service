@@ -7,6 +7,7 @@ Create Date: 2025-11-19 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
 revision = '001'
@@ -19,9 +20,10 @@ purpose_enum = sa.Enum(
     'marketing',
     'personalization',
     'data_sharing',
-    name='purpose_enum'
+    name='purpose_enum',
+    create_type=False
 )
-status_enum = sa.Enum('granted', 'denied', 'revoked', name='status_enum')
+status_enum = sa.Enum('granted', 'denied', 'revoked', name='status_enum', create_type=False)
 region_enum = sa.Enum(
     'EU',
     'US',
@@ -34,21 +36,17 @@ region_enum = sa.Enum(
     'UK',
     'ZA',
     'KR',
-    name='region_enum'
+    name='region_enum',
+    create_type=False
 )
-retention_entity_enum = sa.Enum('consent', 'audit', 'user', name='retention_entity_enum')
-request_type_enum = sa.Enum('access', 'delete', 'export', 'rectify', name='request_type_enum')
-request_status_enum = sa.Enum('pending', 'completed', 'failed', name='request_status_enum')
+retention_entity_enum = sa.Enum('consent', 'audit', 'user', name='retention_entity_enum', create_type=False)
+request_type_enum = sa.Enum('access', 'delete', 'export', 'rectify', name='request_type_enum', create_type=False)
+request_status_enum = sa.Enum('pending', 'completed', 'failed', name='request_status_enum', create_type=False)
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    purpose_enum.create(bind, checkfirst=True)
-    status_enum.create(bind, checkfirst=True)
-    region_enum.create(bind, checkfirst=True)
-    retention_entity_enum.create(bind, checkfirst=True)
-    request_type_enum.create(bind, checkfirst=True)
-    request_status_enum.create(bind, checkfirst=True)
+    # Enums will be created automatically by SQLAlchemy when creating tables
+    # Using create_type=False to prevent duplicate creation attempts
 
     op.create_table(
         'users',

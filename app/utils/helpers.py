@@ -1,9 +1,13 @@
 from datetime import datetime, timezone
-from typing import Union
+from typing import Dict, Union
 
 from fastapi import Request
 
 from app.models.consent import PurposeEnum, RegionEnum
+
+
+_GDPR_REGIONS = {RegionEnum.EU, RegionEnum.INDIA, RegionEnum.UK, RegionEnum.IN}
+_LGDP_REGIONS = {RegionEnum.BR}
 
 
 def get_utc_now() -> datetime:
@@ -41,3 +45,30 @@ def extract_client_ip(request: Request) -> str:
     if request.client and request.client.host:
         return request.client.host
     return ""
+
+
+def build_policy_snapshot(region: Union[str, RegionEnum]) -> Dict[str, Union[str, bool]]:
+    region_value = validate_region(region)
+    if region_value in _GDPR_REGIONS:
+        policy = "gdpr"
+        requires_explicit = True
+        default = "deny"
+    elif region_value in _LGDP_REGIONS:
+        policy = "lgpd"
+        requires_explicit = True
+        default = "deny"
+    elif region_value == RegionEnum.US:
+        policy = "ccpa"
+        requires_explicit = False
+        default = "allow"
+    else:
+        policy = "global"
+        requires_explicit = False
+        default = "allow"
+
+    return {
+        "region": region_value.value,
+        "policy": policy,
+        "requires_explicit": requires_explicit,
+        "default": default,
+    }

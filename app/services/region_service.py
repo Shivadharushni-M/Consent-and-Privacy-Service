@@ -61,8 +61,28 @@ EU_COUNTRIES: frozenset[str] = frozenset(
 
 LIGHTWEIGHT_IP_RANGES: Sequence[Tuple[str, str]] = (
     ("2.16.0.0/12", "FR"),  # EU sample (Akamai range covering several EU states)
+    ("37.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("80.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("84.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("85.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("87.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("91.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("94.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("145.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("185.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("194.0.0.0/8", "NL"),  # Netherlands IP ranges
+    ("212.0.0.0/8", "NL"),  # Netherlands IP ranges
     ("8.0.0.0/7", "US"),  # US-based Google ranges
     ("49.32.0.0/11", "IN"),  # India broadband allocations
+    ("103.0.0.0/8", "IN"),  # India IP ranges (common ISPs)
+    ("117.0.0.0/8", "IN"),  # India IP ranges (BSNL, Airtel)
+    ("122.0.0.0/8", "IN"),  # India IP ranges (Jio, Airtel, BSNL)
+    ("14.0.0.0/8", "IN"),  # India IP ranges
+    ("27.0.0.0/8", "IN"),  # India IP ranges
+    ("59.0.0.0/8", "IN"),  # India IP ranges
+    ("106.0.0.0/8", "IN"),  # India IP ranges
+    ("115.0.0.0/8", "IN"),  # India IP ranges
+    ("180.0.0.0/8", "IN"),  # India IP ranges
 )
 
 _PREPARED_RANGES = tuple((ip_network(cidr), iso) for cidr, iso in LIGHTWEIGHT_IP_RANGES)
@@ -73,12 +93,20 @@ def detect_region_from_ip(ip: Optional[str]) -> RegionEnum:
     Determine the user's region based on IP address.
 
     Always falls back to mock detection (ROW) to avoid raising exceptions.
+    If localhost is detected, attempts to fetch public IP for accurate detection.
     """
 
     normalized_ip = (ip or "").strip()
 
+    # If localhost, try to get public IP
     if _is_local_ip(normalized_ip):
-        return RegionEnum.ROW
+        public_ip = _get_public_ip()
+        if public_ip:
+            normalized_ip = public_ip
+        else:
+            # If can't get public IP, still try to detect from any available method
+            # For now, return ROW only if we truly can't determine
+            return RegionEnum.ROW
 
     maxmind_region = _detect_with_maxmind(normalized_ip)
     if maxmind_region is not None:
@@ -142,5 +170,51 @@ def _is_local_ip(ip: str) -> bool:
     if not ip:
         return True
     normalized = ip.lower()
-    return normalized.startswith("127.") or normalized.startswith("localhost") or normalized == "::1"
+    return normalized.startswith("127.") or normalized.startswith("localhost") or normalized == "::1" or normalized.startswith("192.168.") or normalized.startswith("10.") or normalized.startswith("172.16.")
+
+
+def _get_public_ip() -> Optional[str]:
+    """
+    Attempt to fetch the user's public IP address.
+    Falls back gracefully if the service is unavailable.
+    """
+    try:
+        import httpx
+        # Try multiple services for reliability
+        services = [
+            ("https://api.ipify.org?format=json", "json"),
+            ("https://api64.ipify.org?format=json", "json"),
+            ("https://icanhazip.com", "text"),
+        ]
+        
+        for service_url, response_type in services:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    response = client.get(service_url)
+                    response.raise_for_status()
+                    if response_type == "json":
+                        ip = response.json().get("ip", "").strip()
+                    else:
+                        ip = response.text.strip()
+                    if ip and not _is_local_ip(ip):
+                        return ip
+            except Exception:
+                continue
+    except ImportError:
+        # httpx not available, try urllib as fallback
+        try:
+            import urllib.request
+            import json
+            with urllib.request.urlopen("https://api.ipify.org?format=json", timeout=3) as response:
+                data = json.loads(response.read().decode())
+                ip = data.get("ip", "").strip()
+                if ip and not _is_local_ip(ip):
+                    return ip
+        except Exception:
+            pass
+    except Exception:
+        # Any other error, skip
+        pass
+    
+    return None
 

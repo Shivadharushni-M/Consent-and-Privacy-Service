@@ -5,8 +5,9 @@ from app.db.database import get_db
 from app.schemas.events import EventIn, EventResponse
 from app.services import event_service
 from app.utils.helpers import extract_client_ip
+from app.utils.security import api_key_auth
 
-router = APIRouter(tags=["events"])
+router = APIRouter(tags=["events"], dependencies=[Depends(api_key_auth)])
 
 
 @router.post("/events", response_model=EventResponse)

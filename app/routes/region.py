@@ -8,8 +8,12 @@ router = APIRouter(prefix="/region", tags=["region"])
 
 
 @router.get("", response_model=RegionResponse)
-def get_region(request: Request) -> RegionResponse:
-    ip_address = _extract_client_ip(request)
+def get_region(request: Request, ip: str | None = None) -> RegionResponse:
+    # Allow IP to be passed as query parameter for testing/localhost
+    if ip:
+        ip_address = ip
+    else:
+        ip_address = _extract_client_ip(request)
     region = detect_region_from_ip(ip_address)
     validated_region = validate_region(region)
     return RegionResponse(region=validated_region)

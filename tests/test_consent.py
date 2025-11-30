@@ -53,12 +53,16 @@ def test_grant_consent(db, user):
     assert consent.purpose == PurposeEnum.ANALYTICS
     assert consent.status == StatusEnum.GRANTED
     assert consent.region == RegionEnum.EU
+    assert consent.policy_snapshot is not None
+    assert consent.policy_snapshot["policy"] == "gdpr"
+    assert consent.policy_snapshot["default"] == "deny"
 
     audit_log = db.query(AuditLog).filter(AuditLog.user_id == user.id).first()
     assert audit_log is not None
     assert audit_log.action == "CONSENT_GRANTED"
     assert audit_log.details["purpose"] == PurposeEnum.ANALYTICS.value
     assert audit_log.details["region"] == RegionEnum.EU.value
+    assert audit_log.policy_snapshot["policy"] == "gdpr"
 
 
 def test_revoke_consent(db, user):
@@ -70,6 +74,7 @@ def test_revoke_consent(db, user):
     )
 
     assert consent.status == StatusEnum.REVOKED
+    assert consent.policy_snapshot["policy"] == "gdpr"
 
     audit_log = db.query(AuditLog).filter(AuditLog.user_id == user.id).first()
     assert audit_log is not None

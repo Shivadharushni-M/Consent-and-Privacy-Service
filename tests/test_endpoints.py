@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, get_db
 from app.main import create_app
 from app.models.consent import PurposeEnum, RegionEnum, User
@@ -41,7 +42,7 @@ def client():
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as test_client:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)

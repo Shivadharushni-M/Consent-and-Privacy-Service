@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, get_db
 from app.main import create_app
 from app.models.audit import AuditLog
@@ -49,11 +50,12 @@ def _add_history(
         db.close()
 
 
-def _fetch_audit_log(user_id: uuid.UUID) -> Tuple[int, str]:
+def _fetch_audit_log(user_id: uuid.UUID) -> Tuple[int, str, str | None]:
     db = TestingSessionLocal()
     try:
         logs = db.query(AuditLog).filter(AuditLog.user_id == user_id).all()
-        return len(logs), logs[-1].details["reason"] if logs else ""
+        policy = logs[-1].policy_snapshot["policy"] if logs else None
+        return len(logs), logs[-1].details["reason"] if logs else "", policy
     finally:
         db.close()
 
@@ -64,7 +66,7 @@ def client():
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as test_client:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)
@@ -82,6 +84,7 @@ def test_decision_gdpr_needs_explicit_grant(client: TestClient):
     body = response.json()
     assert body["allowed"] is False
     assert body["reason"] == "gdpr_requires_grant"
+    assert body["policy_snapshot"]["policy"] == "gdpr"
 
 
 def test_decision_us_default_allow(client: TestClient):
@@ -96,10 +99,12 @@ def test_decision_us_default_allow(client: TestClient):
     body = response.json()
     assert body["allowed"] is True
     assert body["reason"] == "ccpa_default_allow"
+    assert body["policy_snapshot"]["policy"] == "ccpa"
 
-    log_count, reason = _fetch_audit_log(user_id)
+    log_count, reason, policy = _fetch_audit_log(user_id)
     assert log_count == 1
     assert reason == "ccpa_default_allow"
+    assert policy == "ccpa"
 
 
 def test_decision_india_like_gdpr(client: TestClient):

@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.consent import (
     PurposeEnum,
@@ -18,6 +18,24 @@ class CreateConsentRequest(BaseModel):
     user_id: UUID
     purpose: PurposeEnum
     region: RegionEnum
+    expires_at: Optional[datetime] = None
+    expires_in_days: Optional[int] = Field(None, gt=0, description="Number of days until consent expires")
+
+    @model_validator(mode="after")
+    def validate_expiry(self):
+        """Ensure only one expiry method is provided."""
+        if self.expires_at and self.expires_in_days:
+            raise ValueError("Cannot specify both expires_at and expires_in_days")
+        return self
+
+    def get_expires_at(self) -> Optional[datetime]:
+        """Calculate expires_at from expires_in_days if provided."""
+        if self.expires_at:
+            return self.expires_at
+        if self.expires_in_days:
+            from app.utils.helpers import get_utc_now
+            return get_utc_now() + timedelta(days=self.expires_in_days)
+        return None
 
 
 class ConsentResponse(BaseModel):
@@ -29,16 +47,19 @@ class ConsentResponse(BaseModel):
     status: StatusEnum
     region: RegionEnum
     timestamp: datetime
+    expires_at: Optional[datetime] = None
+    policy_snapshot: Optional[Dict[str, Any]] = None
 
 
 class AuditLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    user_id: UUID
+    user_id: Optional[UUID] = None
     action: str
     details: Dict[str, Any]
     created_at: datetime
+    policy_snapshot: Optional[Dict[str, Any]] = None
 
 
 class RetentionScheduleCreate(BaseModel):

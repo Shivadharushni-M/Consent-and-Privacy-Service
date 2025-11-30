@@ -1,13 +1,20 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services import user_service
+from app.services.region_service import detect_region_from_ip
+from app.utils.helpers import extract_client_ip
+from app.utils.security import api_key_auth
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(api_key_auth)],
+)
 
 
 def _handle_service_error(exc: ValueError) -> None:
@@ -22,8 +29,14 @@ def _handle_service_error(exc: ValueError) -> None:
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     try:
+        # Auto-detect region from IP if not provided
+        if user.region is None:
+            client_ip = extract_client_ip(request)
+            detected_region = detect_region_from_ip(client_ip)
+            user.region = detected_region
+        
         return user_service.create_user(db=db, email=user.email, region=user.region)
     except ValueError as exc:
         _handle_service_error(exc)

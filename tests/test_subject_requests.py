@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, get_db
 from app.main import create_app
 from app.models.audit import AuditLog
@@ -68,7 +69,7 @@ def client():
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as test_client:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)
@@ -116,7 +117,8 @@ def test_process_export_request(client):
         json={"user_id": str(user_id), "request_type": RequestTypeEnum.EXPORT.value},
     ).json()
 
-    response = client.get(f"/subject-requests/{created['request_id']}")
+    token = created.get("verification_token", "")
+    response = client.get(f"/subject-requests/{created['request_id']}?token={token}")
     assert response.status_code == 200
     data = response.json()
 
@@ -177,7 +179,8 @@ def test_process_delete_request(client):
         json={"user_id": str(user_id), "request_type": RequestTypeEnum.DELETE.value},
     ).json()
 
-    response = client.get(f"/subject-requests/{delete_request['request_id']}")
+    token = delete_request.get("verification_token", "")
+    response = client.get(f"/subject-requests/{delete_request['request_id']}?token={token}")
     assert response.status_code == 200
     assert response.json() == {"status": "completed"}
 
@@ -208,8 +211,45 @@ def test_process_delete_request(client):
 
 
 def test_get_nonexistent_request_returns_404(client):
-    response = client.get(f"/subject-requests/{uuid.uuid4()}")
+    fake_token = "fake-token-for-testing"
+    response = client.get(f"/subject-requests/{uuid.uuid4()}?token={fake_token}")
     assert response.status_code == 404
     assert response.json()["detail"] == "request_not_found"
+
+
+def test_rectify_request_updates_user_and_logs_audit(client):
+    user_id = _create_user("rectify-target@example.com", RegionEnum.EU)
+    payload = {
+        "user_id": str(user_id),
+        "request_type": RequestTypeEnum.RECTIFY.value,
+        "new_email": "rectified@example.com",
+        "new_region": RegionEnum.US.value,
+    }
+
+    response = client.post("/subject-requests", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == RequestStatusEnum.COMPLETED.value
+    assert data["request_type"] == RequestTypeEnum.RECTIFY.value
+
+    db = TestingSessionLocal()
+    try:
+        updated_user = db.get(User, user_id)
+        assert updated_user.email == "rectified@example.com"
+        assert updated_user.region == RegionEnum.US
+
+        request = db.get(SubjectRequest, uuid.UUID(data["request_id"]))
+        assert request.status == RequestStatusEnum.COMPLETED
+        assert request.completed_at is not None
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "subject.rectify.completed")
+            .one()
+        )
+        assert audit.details["changes"]["email"] == "rectified@example.com"
+        assert audit.details["changes"]["region"] == RegionEnum.US.value
+    finally:
+        db.close()
 
 

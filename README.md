@@ -7,9 +7,11 @@ Backend service for managing user consent and privacy preferences with GDPR, CCP
 - ✅ Consent CRUD operations (grant/revoke/history)
 - ✅ Immutable audit logging
 - ✅ Region-based decision engine
-- ✅ Subject rights workflows (export/delete)
-- ✅ Automated data retention jobs
-- ✅ Policy snapshots for compliance
+- ✅ Subject rights workflows (export/delete/rectify)
+- ✅ Automated data retention jobs with APScheduler
+- ✅ Policy snapshots for every consent & decision
+- ✅ API key authentication for every protected endpoint
+- ✅ Admin insights across users, consents, audits, and requests
 
 ## Tech Stack
 
@@ -60,6 +62,7 @@ Edit `.env`:
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/consent_db
 SECRET_KEY=your-secret-key-here
+API_KEY=change-me
 DEBUG=False
 ```
 
@@ -82,6 +85,18 @@ uvicorn app.main:app --reload --port 8000
 - **POST** `/consent/grant` - Grant user consent
 - **POST** `/consent/revoke` - Revoke user consent
 - **GET** `/consent/history/{user_id}` - Get consent history
+- **POST** `/subject-requests` - Create export/delete/rectify requests
+- **GET** `/subject-requests/{request_id}` - Process export/delete requests
+
+### Compliance & Admin
+
+- **GET** `/retention/run` - Trigger automated cleanup
+- **GET** `/admin/users` - List users (filter by `region`)
+- **GET** `/admin/consents/{user_id}` - View consent history snapshots
+- **GET** `/admin/audit` - Inspect audit logs (`action`, `purpose`, `region`)
+- **GET** `/admin/subject-requests` - Review subject rights queue
+
+> All endpoints except `/`, `/health`, and `/region` require `X-API-Key`.
 
 ### Health
 
@@ -94,12 +109,12 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 curl -X POST "http://localhost:8000/consent/grant" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 42,
     "purpose": "analytics",
-    "region": "GDPR",
-    "policy_snapshot": {"version": "1.0"}
+    "region": "GDPR"
   }'
 ```
 
@@ -107,6 +122,7 @@ curl -X POST "http://localhost:8000/consent/grant" \
 
 ```bash
 curl -X POST "http://localhost:8000/consent/revoke" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 42,
@@ -118,7 +134,8 @@ curl -X POST "http://localhost:8000/consent/revoke" \
 ### Get History
 
 ```bash
-curl "http://localhost:8000/consent/history/42"
+curl "http://localhost:8000/consent/history/42" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 ## Testing
@@ -126,14 +143,14 @@ curl "http://localhost:8000/consent/history/42"
 ### Run All Tests
 
 ```bash
-pytest -v
+pytest -q
 ```
 
 ### Run Specific Test File
 
 ```bash
-pytest tests/test_consent.py -v
-pytest tests/test_endpoints.py -v
+pytest tests/test_consent.py -q
+pytest tests/test_endpoints.py -q
 ```
 
 ### Run with Coverage

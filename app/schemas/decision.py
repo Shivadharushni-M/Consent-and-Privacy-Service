@@ -1,3 +1,4 @@
+from typing import Any, Dict
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -11,4 +12,5 @@ class DecisionResponse(BaseModel):
     region: RegionEnum
     allowed: bool
     reason: str
+    policy_snapshot: Dict[str, Any]
 

@@ -12,7 +12,7 @@ from app.utils.helpers import validate_region
 _email_adapter = TypeAdapter(EmailStr)
 
 
-def _validate_email(email: str) -> str:
+def validate_email(email: str) -> str:
     try:
         return _email_adapter.validate_python(email)
     except ValidationError as exc:
@@ -20,7 +20,7 @@ def _validate_email(email: str) -> str:
 
 
 def create_user(db: Session, email: str, region: Union[str, RegionEnum]) -> User:
-    email_value = _validate_email(email)
+    email_value = validate_email(email)
     region_value = validate_region(region)
 
     user = User(email=email_value, region=region_value)

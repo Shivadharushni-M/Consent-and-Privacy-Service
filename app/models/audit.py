@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,11 +14,14 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     details: Mapped[Dict[str, Any]] = mapped_column(JSONBType, nullable=False)
+    policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONBType, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

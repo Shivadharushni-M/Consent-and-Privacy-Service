@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, get_db
 from app.main import create_app
 from app.models.audit import AuditLog
@@ -73,7 +74,7 @@ def client():
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as test_client:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)
@@ -119,7 +120,7 @@ def test_event_email_handler_called(monkeypatch, client: TestClient):
     user_id = _create_user("event-email@example.com", RegionEnum.US)
     captured: Dict[str, object] = {"called": False}
 
-    def fake_email_handler(event_name, properties):
+    def fake_email_handler(event_name, properties, user_id):
         captured["called"] = True
         captured["event"] = event_name.value
         captured["properties"] = properties
@@ -189,4 +190,5 @@ def test_event_creates_audit_entry(client: TestClient):
     assert len(logs) == 1
     assert logs[0].details["event_name"] == EventNameEnum.SIGNUP.value
     assert logs[0].details["allowed"] is True
+    assert logs[0].policy_snapshot["policy"] == "ccpa"
 

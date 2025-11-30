@@ -1,10 +1,12 @@
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, get_db
 from app.main import create_app
 from app.models.audit import AuditLog
@@ -48,7 +50,7 @@ def client():
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as test_client:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)
@@ -85,11 +87,13 @@ def test_update_single_preference_appends_history_and_audit_log(client):
     try:
         history = db.query(ConsentHistory).filter(ConsentHistory.user_id == user_id).all()
         assert len(history) == 1
+        assert history[0].policy_snapshot["region"] == RegionEnum.US.value
 
         audit = db.query(AuditLog).filter(AuditLog.user_id == user_id).one()
         assert audit.action == "preferences.updated"
         assert audit.details["updates"][PurposeEnum.ANALYTICS.value] == StatusEnum.GRANTED.value
         assert audit.details["region"] == RegionEnum.US.value
+        assert audit.policy_snapshot["policy"] == "ccpa"
     finally:
         db.close()
 
@@ -117,6 +121,80 @@ def test_update_multiple_preferences(client):
         assert len(history) == 2
     finally:
         db.close()
+
+
+def test_update_analytics_and_email_preferences(client):
+    user_id = _create_user("analytics-email@example.com", RegionEnum.UK)
+    payload = {
+        "user_id": str(user_id),
+        "updates": {
+            PurposeEnum.ANALYTICS.value: StatusEnum.GRANTED.value,
+            PurposeEnum.EMAIL.value: StatusEnum.DENIED.value,
+        },
+    }
+
+    response = client.post("/consent/preferences/update", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["preferences"][PurposeEnum.ANALYTICS.value] == StatusEnum.GRANTED.value
+    assert data["preferences"][PurposeEnum.EMAIL.value] == StatusEnum.DENIED.value
+
+    db = TestingSessionLocal()
+    try:
+        history = db.query(ConsentHistory).filter(ConsentHistory.user_id == user_id).all()
+        assert len(history) == 2
+        stored_purposes = {entry.purpose for entry in history}
+        assert {PurposeEnum.ANALYTICS, PurposeEnum.EMAIL}.issubset(stored_purposes)
+    finally:
+        db.close()
+
+
+def test_get_preferences_handles_expired_entries(client):
+    user_id = _create_user("expired@example.com", RegionEnum.CA)
+    now = datetime.now(timezone.utc)
+
+    db = TestingSessionLocal()
+    try:
+        db.add_all(
+            [
+                ConsentHistory(
+                    user_id=user_id,
+                    purpose=PurposeEnum.ANALYTICS,
+                    status=StatusEnum.GRANTED,
+                    region=RegionEnum.CA,
+                    timestamp=now,
+                    expires_at=now + timedelta(days=1),
+                ),
+                ConsentHistory(
+                    user_id=user_id,
+                    purpose=PurposeEnum.EMAIL,
+                    status=StatusEnum.GRANTED,
+                    region=RegionEnum.CA,
+                    timestamp=now,
+                    expires_at=now - timedelta(days=1),
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/consent/preferences/{user_id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["preferences"][PurposeEnum.ANALYTICS.value] == StatusEnum.GRANTED.value
+    assert data["preferences"][PurposeEnum.EMAIL.value] == StatusEnum.REVOKED.value
+
+
+def test_get_preferences_unknown_user_returns_404(client):
+    random_id = uuid4()
+
+    response = client.get(f"/consent/preferences/{random_id}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "user_not_found"
 
 
 def test_invalid_purpose_rejected(client):

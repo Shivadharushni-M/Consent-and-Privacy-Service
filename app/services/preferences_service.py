@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 from app.models.consent import ConsentHistory, PurposeEnum, RegionEnum, StatusEnum, User
 from app.services import user_service
-from app.utils.helpers import get_utc_now, validate_region
+from app.utils.helpers import build_policy_snapshot, get_utc_now, validate_region
 
 
 PreferencesMap = Dict[PurposeEnum, StatusEnum]
@@ -43,9 +43,12 @@ def _resolve_user(db: Session, user_id: UUID, user: Optional[User]) -> User:
 def get_latest_preferences(
     db: Session, user_id: UUID, *, user: Optional[User] = None
 ) -> Tuple[RegionEnum, PreferencesMap]:
+    from app.utils.helpers import get_utc_now
+
     user_obj = _resolve_user(db, user_id, user)
     preferences = _default_preferences()
     seen = set()
+    now = get_utc_now()
 
     history = (
         db.query(ConsentHistory)
@@ -57,7 +60,20 @@ def get_latest_preferences(
     for record in history:
         if record.purpose in seen:
             continue
-        preferences[record.purpose] = record.status
+        # Check if consent is expired
+        if record.expires_at:
+            # Ensure both datetimes are timezone-aware for comparison
+            expires_at = record.expires_at
+            if expires_at.tzinfo is None:
+                # If expires_at is naive, assume it's UTC
+                from datetime import timezone
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < now:
+                preferences[record.purpose] = StatusEnum.REVOKED
+            else:
+                preferences[record.purpose] = record.status
+        else:
+            preferences[record.purpose] = record.status
         seen.add(record.purpose)
         if len(seen) == len(PurposeEnum):
             break
@@ -73,6 +89,7 @@ def update_preferences(
 
     user_obj = user_service.get_user(db, user_id)
     region = validate_region(user_obj.region)
+    snapshot = build_policy_snapshot(region)
 
     new_entries = []
     audit_updates = {}
@@ -86,6 +103,7 @@ def update_preferences(
                 status=status,
                 region=region,
                 timestamp=get_utc_now(),
+                policy_snapshot=snapshot,
             )
         )
         audit_updates[purpose.value] = status.value
@@ -97,6 +115,7 @@ def update_preferences(
         action="preferences.updated",
         details={"user_id": str(user_obj.id), "region": region.value, "updates": audit_updates},
         created_at=get_utc_now(),
+        policy_snapshot=snapshot,
     )
     db.add(audit)
     db.commit()

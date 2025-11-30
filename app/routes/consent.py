@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.consent import ConsentResponse, CreateConsentRequest
 from app.services import consent_service
+from app.utils.security import api_key_auth
 
-router = APIRouter(prefix="/consent", tags=["consent"])
+router = APIRouter(
+    prefix="/consent",
+    tags=["consent"],
+    dependencies=[Depends(api_key_auth)],
+)
 
 
 def _handle_service_errors(exc: ValueError) -> None:
@@ -27,6 +32,7 @@ def grant_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
             user_id=request.user_id,
             purpose=request.purpose,
             region=request.region,
+            expires_at=request.get_expires_at(),
         )
     except ValueError as exc:
         _handle_service_errors(exc)
@@ -40,6 +46,7 @@ def revoke_consent(request: CreateConsentRequest, db: Session = Depends(get_db))
             user_id=request.user_id,
             purpose=request.purpose,
             region=request.region,
+            expires_at=request.get_expires_at(),
         )
     except ValueError as exc:
         _handle_service_errors(exc)

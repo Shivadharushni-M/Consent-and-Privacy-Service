@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.preferences import PreferencesResponse, PreferencesUpdateRequest
 from app.services.preferences_service import get_latest_preferences, update_preferences
+from app.utils.security import api_key_auth
 
-router = APIRouter(prefix="/consent", tags=["preferences"])
+router = APIRouter(
+    prefix="/consent",
+    tags=["preferences"],
+    dependencies=[Depends(api_key_auth)],
+)
 
 _ERROR_MAP = {
     "user_not_found": (status.HTTP_404_NOT_FOUND, "user_not_found"),
