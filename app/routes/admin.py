@@ -1,50 +1,74 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import cast, String, desc
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from typing import Optional, List
-from datetime import datetime
+
 from app.db.database import get_db
-from app.utils.security import api_key_auth
 from app.models.audit import AuditLog
+from app.models.consent import (
+    ConsentHistory,
+    PurposeEnum,
+    RegionEnum,
+    SubjectRequest,
+    User,
+)
+from app.schemas.consent import AuditLogResponse, ConsentResponse, SubjectRequestResponse
+from app.schemas.user import UserResponse
+from app.services import user_service
+from app.utils.security import api_key_auth
 
-router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(api_key_auth)])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(api_key_auth)],
+)
 
-@router.get("/users")
-def list_users(db: Session = Depends(get_db)):
-    """List Users"""
-    return {"users": []}
 
-@router.get("/consents/{user_id}")
-def list_user_consents(user_id: str, db: Session = Depends(get_db)):
-    """List User Consents"""
-    return {"user_id": user_id, "consents": []}
+@router.get("/users", response_model=List[UserResponse])
+def list_users(
+    region: Optional[RegionEnum] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(User)
+    if region:
+        query = query.filter(User.region == region)
+    return query.order_by(User.created_at.desc()).all()
 
-@router.get("/audit", summary="List Audit Logs", description="Retrieve audit logs with optional filtering by user_id, action, and date range")
+
+@router.get("/consents/{user_id}", response_model=List[ConsentResponse])
+def list_user_consents(user_id: UUID, db: Session = Depends(get_db)):
+    try:
+        user_service.get_user(db, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="user_not_found") from exc
+
+    return (
+        db.query(ConsentHistory)
+        .filter(ConsentHistory.user_id == user_id)
+        .order_by(ConsentHistory.timestamp.desc())
+        .all()
+    )
+
+
+@router.get("/audit", response_model=List[AuditLogResponse], summary="List Audit Logs", description="Retrieve audit logs with optional filtering")
 def list_audit_logs(
+    action: Optional[str] = Query(default=None),
+    purpose: Optional[PurposeEnum] = Query(default=None),
+    region: Optional[RegionEnum] = Query(default=None),
     user_id: Optional[str] = Query(None, description="Filter by user ID (UUID)"),
-    action: Optional[str] = Query(None, description="Filter by action type (e.g., 'grant', 'revoke')"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of logs to return"),
     offset: int = Query(0, ge=0, description="Number of logs to skip"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """List Audit Logs - Get all audit logs with optional filtering"""
     try:
         import uuid
         
-        # Check if table exists by attempting a simple query
-        try:
-            query = db.query(AuditLog)
-        except Exception as table_error:
-            # If table doesn't exist, return empty result
-            return {
-                "total": 0,
-                "limit": limit,
-                "offset": offset,
-                "logs": [],
-                "message": "Audit logs table not found or not accessible"
-            }
+        query = db.query(AuditLog)
         
-        # Filter by user_id if provided
+        # Filter by user_id if provided (backward compatibility)
         if user_id:
             try:
                 user_uuid = uuid.UUID(user_id)
@@ -52,53 +76,18 @@ def list_audit_logs(
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid user_id format. Must be a valid UUID.")
         
-        # Filter by action if provided
         if action:
             query = query.filter(AuditLog.action == action)
-        
-        # Order by timestamp descending (most recent first)
-        query = query.order_by(desc(AuditLog.timestamp))
+        if purpose:
+            query = query.filter(cast(AuditLog.details["purpose"], String) == purpose.value)
+        if region:
+            query = query.filter(cast(AuditLog.details["region"], String) == region.value)
         
         # Apply pagination
-        try:
-            total = query.count()
-            logs = query.offset(offset).limit(limit).all()
-        except Exception as query_error:
-            # If query fails, return empty result with error message
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"Query error in list_audit_logs: {query_error}")
-            print(error_details)
-            return {
-                "total": 0,
-                "limit": limit,
-                "offset": offset,
-                "logs": [],
-                "error": str(query_error)
-            }
+        total = query.count()
+        logs = query.order_by(desc(AuditLog.created_at) if hasattr(AuditLog, 'created_at') else desc(AuditLog.timestamp)).offset(offset).limit(limit).all()
         
-        # Filter out None values and safely convert logs
-        log_list = []
-        for log in logs:
-            if log is None:
-                continue
-            try:
-                log_list.append({
-                    "id": log.id,
-                    "user_id": str(log.user_id) if log.user_id else None,
-                    "action": log.action if log.action else None,
-                    "timestamp": log.timestamp.isoformat() if log.timestamp else None
-                })
-            except AttributeError as attr_error:
-                print(f"Error processing log entry: {attr_error}, log object: {log}")
-                continue
-        
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "logs": log_list
-        }
+        return logs
     except HTTPException:
         raise
     except Exception as e:
@@ -106,10 +95,13 @@ def list_audit_logs(
         error_details = traceback.format_exc()
         print(f"Error in list_audit_logs: {e}")
         print(error_details)
-        # Return error details in response for debugging
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}. Check server logs for details.")
 
-@router.get("/subject-requests")
+
+@router.get("/subject-requests", response_model=List[SubjectRequestResponse])
 def list_subject_requests(db: Session = Depends(get_db)):
-    """List Subject Requests"""
-    return {"requests": []}
+    return (
+        db.query(SubjectRequest)
+        .order_by(SubjectRequest.requested_at.desc())
+        .all()
+    )

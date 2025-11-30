@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: consent-privacy-service
+    runtime: python
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: API_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+    healthCheckPath: /health
+
+databases:
+  - name: consent-db
+    databaseName: consent_db
+    user: consent_user
+    plan: free

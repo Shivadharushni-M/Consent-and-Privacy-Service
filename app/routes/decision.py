@@ -1,13 +1,32 @@
-from fastapi import APIRouter, Depends, Query
-from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.models.consent import PurposeEnum, VendorEnum
+from app.schemas.decision import DecisionResponse
+from app.services.decision_service import decide
+from app.services.region_service import detect_region_from_ip
+from app.utils.helpers import extract_client_ip
 from app.utils.security import api_key_auth
 
 router = APIRouter(prefix="/decision", tags=["decision"], dependencies=[Depends(api_key_auth)])
 
-@router.get("")
+
+@router.get("", response_model=DecisionResponse, summary="Get Decision", description="Get consent decision for a user and purpose")
 def get_decision(
-    user_id: Optional[str] = Query(None, description="User ID"),
-    purpose: Optional[str] = Query(None, description="Purpose")
-):
-    """Get Decision"""
-    return {"decision": "granted", "user_id": user_id, "purpose": purpose}
+    request: Request,
+    user_id: UUID = Query(..., description="User ID"),
+    purpose: PurposeEnum = Query(..., description="Purpose"),
+    vendor: VendorEnum = Query(default=None, description="Vendor (optional)"),
+    db: Session = Depends(get_db),
+) -> DecisionResponse:
+    """Get Decision - Determines consent decision based on user, purpose, and region"""
+    fallback_region = detect_region_from_ip(extract_client_ip(request))
+    try:
+        return decide(
+            db, user_id, purpose, fallback_region=fallback_region, vendor=vendor
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

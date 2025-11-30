@@ -7,9 +7,11 @@ Backend service for managing user consent and privacy preferences with GDPR, CCP
 - ✅ Consent CRUD operations (grant/revoke/history)
 - ✅ Immutable audit logging
 - ✅ Region-based decision engine
-- ✅ Subject rights workflows (export/delete)
-- ✅ Automated data retention jobs
-- ✅ Policy snapshots for compliance
+- ✅ Subject rights workflows (export/delete/rectify)
+- ✅ Automated data retention jobs with APScheduler
+- ✅ Policy snapshots for every consent & decision
+- ✅ API key authentication for every protected endpoint
+- ✅ Admin insights across users, consents, audits, and requests
 
 ## Tech Stack
 
@@ -60,6 +62,7 @@ Edit `.env`:
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/consent_db
 SECRET_KEY=your-secret-key-here
+API_KEY=change-me
 DEBUG=False
 ```
 
@@ -82,6 +85,18 @@ uvicorn app.main:app --reload --port 8000
 - **POST** `/consent/grant` - Grant user consent
 - **POST** `/consent/revoke` - Revoke user consent
 - **GET** `/consent/history/{user_id}` - Get consent history
+- **POST** `/subject-requests` - Create export/delete/rectify requests
+- **GET** `/subject-requests/{request_id}` - Process export/delete requests
+
+### Compliance & Admin
+
+- **GET** `/retention/run` - Trigger automated cleanup
+- **GET** `/admin/users` - List users (filter by `region`)
+- **GET** `/admin/consents/{user_id}` - View consent history snapshots
+- **GET** `/admin/audit` - Inspect audit logs (`action`, `purpose`, `region`)
+- **GET** `/admin/subject-requests` - Review subject rights queue
+
+> All endpoints except `/`, `/health`, and `/region` require `X-API-Key`.
 
 ### Health
 
@@ -94,12 +109,12 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 curl -X POST "http://localhost:8000/consent/grant" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 42,
     "purpose": "analytics",
-    "region": "GDPR",
-    "policy_snapshot": {"version": "1.0"}
+    "region": "GDPR"
   }'
 ```
 
@@ -107,6 +122,7 @@ curl -X POST "http://localhost:8000/consent/grant" \
 
 ```bash
 curl -X POST "http://localhost:8000/consent/revoke" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 42,
@@ -118,7 +134,8 @@ curl -X POST "http://localhost:8000/consent/revoke" \
 ### Get History
 
 ```bash
-curl "http://localhost:8000/consent/history/42"
+curl "http://localhost:8000/consent/history/42" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 ## Testing
@@ -126,14 +143,14 @@ curl "http://localhost:8000/consent/history/42"
 ### Run All Tests
 
 ```bash
-pytest -v
+pytest -q
 ```
 
 ### Run Specific Test File
 
 ```bash
-pytest tests/test_consent.py -v
-pytest tests/test_endpoints.py -v
+pytest tests/test_consent.py -q
+pytest tests/test_endpoints.py -q
 ```
 
 ### Run with Coverage
@@ -162,16 +179,82 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
-## Production Deployment
+## Deploy to Render
 
-1. Set `DEBUG=False` in `.env`
-2. Use strong `SECRET_KEY` (generate with `openssl rand -hex 32`)
-3. Configure production PostgreSQL database
-4. Use a production ASGI server (gunicorn + uvicorn workers)
+### Step 1: Push to GitHub
 
 ```bash
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
+# Initialize git (if not already done)
+git init
+
+# Add all files
+git add .
+
+# Commit
+git commit -m "Initial commit: Consent & Privacy Service"
+
+# Add your GitHub repository (replace with your repo URL)
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+
+# Push to GitHub
+git branch -M main
+git push -u origin main
 ```
+
+### Step 2: Deploy on Render
+
+1. **Go to Render Dashboard**: https://dashboard.render.com
+2. **Click "New +" → "Web Service"**
+3. **Connect your GitHub repository**
+4. **Render will auto-detect `render.yaml`** and configure:
+   - Web service
+   - PostgreSQL database
+   - Environment variables
+
+### Step 3: Set Environment Variables
+
+After deployment, go to **Environment** tab and add:
+
+```
+SECRET_KEY=<generate-with-openssl-rand-hex-32>
+API_KEY=<generate-with-openssl-rand-hex-32>
+DEBUG=False
+```
+
+**Generate keys:**
+```bash
+openssl rand -hex 32  # Use this for SECRET_KEY
+openssl rand -hex 32  # Use this for API_KEY
+```
+
+### Step 4: Verify Deployment
+
+```bash
+# Check health
+curl https://your-service-name.onrender.com/health
+
+# Test API
+curl https://your-service-name.onrender.com/api/v1/version
+```
+
+**Note**: `DATABASE_URL` is automatically set by Render if using `render.yaml`.
+
+### Manual Deploy (Without render.yaml)
+
+If you prefer manual setup:
+
+1. **Create PostgreSQL Database**:
+   - Render Dashboard → "New +" → "PostgreSQL"
+   - Note the **Internal Database URL**
+
+2. **Create Web Service**:
+   - Build Command: `pip install -r requirements.txt && alembic upgrade head`
+   - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Environment Variables:
+     - `DATABASE_URL` (from PostgreSQL)
+     - `SECRET_KEY` (generate strong key)
+     - `API_KEY` (generate strong key)
+     - `DEBUG=False`
 
 ## Compliance
 
