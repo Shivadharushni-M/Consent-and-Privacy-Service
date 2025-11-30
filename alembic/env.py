@@ -1,8 +1,24 @@
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+import configparser
 
 config = context.config
+
+# Disable interpolation to handle URLs with % characters (e.g., %40 for @)
+# Create a no-op interpolation class that doesn't process % characters
+class NoInterpolation(configparser.Interpolation):
+    def before_get(self, parser, section, option, value, defaults):
+        return value
+    
+    def before_set(self, parser, section, option, value):
+        return value
+    
+    def before_read(self, parser, section, option, value):
+        return value
+
+if hasattr(config, 'file_config'):
+    config.file_config._interpolation = NoInterpolation()
 
 from app.config import settings
 config.set_main_option('sqlalchemy.url', settings.DATABASE_URL)

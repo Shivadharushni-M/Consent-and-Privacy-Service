@@ -1,4 +1,6 @@
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Index
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.db.database import Base
 
@@ -6,7 +8,7 @@ class ConsentHistory(Base):
     __tablename__ = "consent_history"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     purpose = Column(String(50), nullable=False, index=True)
     status = Column(String(20), nullable=False)
     region = Column(String(50), nullable=False)

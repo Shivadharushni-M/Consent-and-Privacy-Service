@@ -4,14 +4,18 @@ from typing import Optional
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/consent_db"
     SECRET_KEY: str = "your-secret-key-change-in-production"
+    API_KEY: str = "local-dev-key"  # API key for authentication
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DEBUG: bool = False
+    MAXMIND_ACCOUNT_ID: Optional[str] = None
+    MAXMIND_LICENSE_KEY: Optional[str] = None
     
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=True
+        case_sensitive=True,
+        extra="ignore"  # Ignore extra fields in .env file
     )
 
 settings = Settings()
