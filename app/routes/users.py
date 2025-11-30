@@ -54,7 +54,8 @@ def get_user(user_id: UUID, db: Session = Depends(get_db)):
 def update_user(user_id: UUID, payload: UserUpdate, db: Session = Depends(get_db)):
     if payload.region is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Region is required"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
+            detail="Region is required. Provide a valid region value (e.g., 'EU', 'US', 'INDIA', etc.)"
         )
     try:
         return user_service.update_region(db=db, user_id=user_id, region=payload.region)

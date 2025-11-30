@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -28,6 +28,8 @@ class DataExportResponse(BaseModel):
     region: RegionEnum
     preferences: Dict[str, str]
     history: List[ConsentResponse]
+    audit_logs: List[Dict[str, Any]] = []
+    policy_snapshots: List[Dict[str, Any]] = []
 
 
 class DataAccessResponse(BaseModel):

@@ -60,6 +60,21 @@ EU_COUNTRIES: frozenset[str] = frozenset(
 )
 
 LIGHTWEIGHT_IP_RANGES: Sequence[Tuple[str, str]] = (
+    # India IP ranges - CHECK FIRST to avoid conflicts with US ranges
+    ("14.0.0.0/8", "IN"),  # India IP ranges
+    ("27.0.0.0/8", "IN"),  # India IP ranges
+    ("49.32.0.0/11", "IN"),  # India broadband allocations
+    ("59.0.0.0/8", "IN"),  # India IP ranges
+    ("103.0.0.0/8", "IN"),  # India IP ranges (common ISPs - Jio, Airtel, BSNL)
+    ("106.0.0.0/8", "IN"),  # India IP ranges
+    ("115.0.0.0/8", "IN"),  # India IP ranges
+    ("117.0.0.0/8", "IN"),  # India IP ranges (BSNL, Airtel)
+    ("122.0.0.0/8", "IN"),  # India IP ranges (Jio, Airtel, BSNL)
+    ("180.0.0.0/8", "IN"),  # India IP ranges
+    ("182.0.0.0/8", "IN"),  # India IP ranges
+    ("183.0.0.0/8", "IN"),  # India IP ranges
+    ("223.0.0.0/8", "IN"),  # India IP ranges
+    # EU IP ranges
     ("2.16.0.0/12", "FR"),  # EU sample (Akamai range covering several EU states)
     ("37.0.0.0/8", "NL"),  # Netherlands IP ranges
     ("80.0.0.0/8", "NL"),  # Netherlands IP ranges
@@ -72,17 +87,8 @@ LIGHTWEIGHT_IP_RANGES: Sequence[Tuple[str, str]] = (
     ("185.0.0.0/8", "NL"),  # Netherlands IP ranges
     ("194.0.0.0/8", "NL"),  # Netherlands IP ranges
     ("212.0.0.0/8", "NL"),  # Netherlands IP ranges
-    ("8.0.0.0/7", "US"),  # US-based Google ranges
-    ("49.32.0.0/11", "IN"),  # India broadband allocations
-    ("103.0.0.0/8", "IN"),  # India IP ranges (common ISPs)
-    ("117.0.0.0/8", "IN"),  # India IP ranges (BSNL, Airtel)
-    ("122.0.0.0/8", "IN"),  # India IP ranges (Jio, Airtel, BSNL)
-    ("14.0.0.0/8", "IN"),  # India IP ranges
-    ("27.0.0.0/8", "IN"),  # India IP ranges
-    ("59.0.0.0/8", "IN"),  # India IP ranges
-    ("106.0.0.0/8", "IN"),  # India IP ranges
-    ("115.0.0.0/8", "IN"),  # India IP ranges
-    ("180.0.0.0/8", "IN"),  # India IP ranges
+    # US IP ranges - CHECK LAST as it's very broad
+    ("8.0.0.0/7", "US"),  # US-based Google ranges (very broad, check last)
 )
 
 _PREPARED_RANGES = tuple((ip_network(cidr), iso) for cidr, iso in LIGHTWEIGHT_IP_RANGES)
@@ -99,20 +105,33 @@ def detect_region_from_ip(ip: Optional[str]) -> RegionEnum:
     normalized_ip = (ip or "").strip()
 
     # If localhost, try to get public IP
-    if _is_local_ip(normalized_ip):
+    is_localhost = _is_local_ip(normalized_ip)
+    if is_localhost:
         public_ip = _get_public_ip()
-        if public_ip:
+        if public_ip and not _is_local_ip(public_ip):
             normalized_ip = public_ip
         else:
-            # If can't get public IP, still try to detect from any available method
-            # For now, return ROW only if we truly can't determine
+            # If can't get public IP or it's still localhost, try lightweight first
+            # This handles cases where public IP lookup fails
+            # For localhost without public IP, return ROW
+            if not public_ip:
+                return RegionEnum.ROW
+            # If public IP is still localhost, return ROW
             return RegionEnum.ROW
 
+    # Try lightweight detection first (faster and more reliable for known ranges)
+    # This takes precedence over MaxMind to ensure India ranges are detected correctly
+    lightweight_result = _lightweight_region(normalized_ip)
+    if lightweight_result != RegionEnum.ROW:
+        return lightweight_result
+    
+    # Fall back to MaxMind if lightweight didn't match
+    # But only if MaxMind is available and returns a valid result
     maxmind_region = _detect_with_maxmind(normalized_ip)
-    if maxmind_region is not None:
+    if maxmind_region is not None and maxmind_region != RegionEnum.ROW:
         return maxmind_region
 
-    return _lightweight_region(normalized_ip)
+    return RegionEnum.ROW
 
 
 def _detect_with_maxmind(ip: str) -> Optional[RegionEnum]:

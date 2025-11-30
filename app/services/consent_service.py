@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
@@ -36,9 +37,17 @@ def grant_consent(
         policy_snapshot=snapshot,
     )
     db.add_all([consent, audit])
-    db.commit()
-    db.refresh(consent)
-    return consent
+    try:
+        db.commit()
+        db.refresh(consent)
+        return consent
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("database_error") from exc
+    except Exception as exc:
+        db.rollback()
+        error_msg = str(exc) if exc else "Unknown error"
+        raise ValueError(f"Failed to grant consent: {error_msg}") from exc
 
 
 def revoke_consent(
@@ -67,9 +76,17 @@ def revoke_consent(
         policy_snapshot=snapshot,
     )
     db.add_all([consent, audit])
-    db.commit()
-    db.refresh(consent)
-    return consent
+    try:
+        db.commit()
+        db.refresh(consent)
+        return consent
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("database_error") from exc
+    except Exception as exc:
+        db.rollback()
+        error_msg = str(exc) if exc else "Unknown error"
+        raise ValueError(f"Failed to revoke consent: {error_msg}") from exc
 
 
 def get_history(db: Session, user_id: uuid.UUID) -> List[ConsentHistory]:

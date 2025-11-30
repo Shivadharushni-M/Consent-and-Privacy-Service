@@ -16,12 +16,19 @@ router = APIRouter(
 )
 
 
-def _handle_service_errors(exc: ValueError) -> None:
-    if str(exc) == "user_not_found":
+def _handle_service_errors(exc: Exception) -> None:
+    error_str = str(exc)
+    if error_str == "user_not_found":
         raise HTTPException(status_code=404, detail="User not found") from exc
-    if str(exc) == "invalid_region":
+    if error_str == "invalid_region":
         raise HTTPException(status_code=422, detail="Invalid region") from exc
-    raise HTTPException(status_code=400, detail="Invalid request") from exc
+    if error_str == "database_error":
+        raise HTTPException(status_code=500, detail="Database error occurred") from exc
+    # For other ValueError exceptions, use the message
+    if isinstance(exc, ValueError):
+        raise HTTPException(status_code=400, detail=error_str) from exc
+    # For any other exception, return a generic error
+    raise HTTPException(status_code=500, detail=f"Internal server error: {error_str}") from exc
 
 
 @router.post("/grant", response_model=ConsentResponse, status_code=201)
@@ -34,7 +41,7 @@ def grant_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
             region=request.region,
             expires_at=request.get_expires_at(),
         )
-    except ValueError as exc:
+    except Exception as exc:
         _handle_service_errors(exc)
 
 
@@ -48,7 +55,7 @@ def revoke_consent(request: CreateConsentRequest, db: Session = Depends(get_db))
             region=request.region,
             expires_at=request.get_expires_at(),
         )
-    except ValueError as exc:
+    except Exception as exc:
         _handle_service_errors(exc)
 
 
@@ -56,5 +63,5 @@ def revoke_consent(request: CreateConsentRequest, db: Session = Depends(get_db))
 def get_consent_history(user_id: UUID, db: Session = Depends(get_db)):
     try:
         return consent_service.get_history(db=db, user_id=user_id)
-    except ValueError as exc:
+    except Exception as exc:
         _handle_service_errors(exc)

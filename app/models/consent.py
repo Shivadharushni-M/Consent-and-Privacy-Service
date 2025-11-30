@@ -53,6 +53,8 @@ class StatusEnum(str, enum.Enum):
     GRANTED = "granted"
     DENIED = "denied"
     REVOKED = "revoked"
+    WITHDRAWN = "withdrawn"
+    EXPIRED = "expired"
 
 
 class RegionEnum(str, enum.Enum):
@@ -86,15 +88,23 @@ class RequestTypeEnum(str, enum.Enum):
 
 class RequestStatusEnum(str, enum.Enum):
     PENDING = "pending"
+    PENDING_VERIFICATION = "pending_verification"
+    VERIFIED = "verified"
+    PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    primary_identifier_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    primary_identifier_value: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     region: Mapped[RegionEnum] = mapped_column(
         SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
     )
@@ -106,6 +116,9 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
 
     consent_history: Mapped[List["ConsentHistory"]] = relationship(
@@ -119,21 +132,42 @@ class User(Base):
     )
 
 
+class LegalBasisEnum(str, enum.Enum):
+    CONSENT = "consent"
+    CONTRACT = "contract"
+    LEGITIMATE_INTEREST = "legitimate_interest"
+    VITAL_INTERESTS = "vital_interests"
+    PUBLIC_TASK = "public_task"
+    LEGAL_OBLIGATION = "legal_obligation"
+
+
 class ConsentHistory(Base):
     __tablename__ = "consent_history"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     purpose: Mapped[PurposeEnum] = mapped_column(
         SQLEnum(PurposeEnum, name="purpose_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
     )
+    vendor_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID, nullable=True, index=True)
+    legal_basis: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[StatusEnum] = mapped_column(
         SQLEnum(StatusEnum, name="status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     region: Mapped[RegionEnum] = mapped_column(
         SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
+    )
+    granted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    valid_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
@@ -141,9 +175,14 @@ class ConsentHistory(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    policy_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID, nullable=True, index=True)
     policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONBType, nullable=True
     )
+    source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    meta: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONBType, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="consent_history")
 
@@ -171,6 +210,7 @@ class SubjectRequest(Base):
     __tablename__ = "subject_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -189,9 +229,12 @@ class SubjectRequest(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    verification_token: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, index=True
+    verification_token_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        GUID, ForeignKey("verification_tokens.id"), nullable=True, index=True
     )
+    result_location: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    requested_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="subject_requests")
 

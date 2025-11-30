@@ -179,16 +179,82 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
-## Production Deployment
+## Deploy to Render
 
-1. Set `DEBUG=False` in `.env`
-2. Use strong `SECRET_KEY` (generate with `openssl rand -hex 32`)
-3. Configure production PostgreSQL database
-4. Use a production ASGI server (gunicorn + uvicorn workers)
+### Step 1: Push to GitHub
 
 ```bash
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
+# Initialize git (if not already done)
+git init
+
+# Add all files
+git add .
+
+# Commit
+git commit -m "Initial commit: Consent & Privacy Service"
+
+# Add your GitHub repository (replace with your repo URL)
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+
+# Push to GitHub
+git branch -M main
+git push -u origin main
 ```
+
+### Step 2: Deploy on Render
+
+1. **Go to Render Dashboard**: https://dashboard.render.com
+2. **Click "New +" → "Web Service"**
+3. **Connect your GitHub repository**
+4. **Render will auto-detect `render.yaml`** and configure:
+   - Web service
+   - PostgreSQL database
+   - Environment variables
+
+### Step 3: Set Environment Variables
+
+After deployment, go to **Environment** tab and add:
+
+```
+SECRET_KEY=<generate-with-openssl-rand-hex-32>
+API_KEY=<generate-with-openssl-rand-hex-32>
+DEBUG=False
+```
+
+**Generate keys:**
+```bash
+openssl rand -hex 32  # Use this for SECRET_KEY
+openssl rand -hex 32  # Use this for API_KEY
+```
+
+### Step 4: Verify Deployment
+
+```bash
+# Check health
+curl https://your-service-name.onrender.com/health
+
+# Test API
+curl https://your-service-name.onrender.com/api/v1/version
+```
+
+**Note**: `DATABASE_URL` is automatically set by Render if using `render.yaml`.
+
+### Manual Deploy (Without render.yaml)
+
+If you prefer manual setup:
+
+1. **Create PostgreSQL Database**:
+   - Render Dashboard → "New +" → "PostgreSQL"
+   - Note the **Internal Database URL**
+
+2. **Create Web Service**:
+   - Build Command: `pip install -r requirements.txt && alembic upgrade head`
+   - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Environment Variables:
+     - `DATABASE_URL` (from PostgreSQL)
+     - `SECRET_KEY` (generate strong key)
+     - `API_KEY` (generate strong key)
+     - `DEBUG=False`
 
 ## Compliance
 
