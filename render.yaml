@@ -2,8 +2,8 @@ services:
   - type: web
     name: consent-privacy-service
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: bash start.sh
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         sync: false
