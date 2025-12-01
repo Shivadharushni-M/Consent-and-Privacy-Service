@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Dict, Union, Optional
+from typing import Dict, Union
 
 from fastapi import Request
 
@@ -8,6 +8,7 @@ from app.models.consent import PurposeEnum, RegionEnum
 
 _GDPR_REGIONS = {RegionEnum.EU, RegionEnum.INDIA, RegionEnum.UK, RegionEnum.IN}
 _LGDP_REGIONS = {RegionEnum.BR}
+
 
 def get_utc_now() -> datetime:
     return datetime.now(timezone.utc)

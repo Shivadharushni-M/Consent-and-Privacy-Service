@@ -35,3 +35,4 @@ def api_key_auth(x_api_key: str = Header(default=None, alias="X-API-Key")) -> st
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_api_key"
         )
     return expected_key
+

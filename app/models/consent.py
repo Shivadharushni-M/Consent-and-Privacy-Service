@@ -185,7 +185,6 @@ class ConsentHistory(Base):
     meta: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONBType, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="consent_history")
-
     __table_args__ = (
         Index("idx_user_purpose", "user_id", "purpose"),
         Index("idx_user_timestamp", "user_id", "timestamp"),
@@ -276,3 +275,4 @@ class VendorConsent(Base):
         Index("idx_user_vendor_purpose", "user_id", "vendor", "purpose"),
         Index("idx_user_vendor_timestamp", "user_id", "vendor", "timestamp"),
     )
+

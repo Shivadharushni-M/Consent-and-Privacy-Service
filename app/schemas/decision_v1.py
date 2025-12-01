@@ -7,14 +7,11 @@ from pydantic import BaseModel
 from app.models.consent import PurposeEnum, RegionEnum
 
 
-class DecisionRequest(BaseModel):
-    subject_external_id: Optional[str] = None
-    subject_id: Optional[UUID] = None
-    purpose_code: str
-    vendor_code: Optional[str] = None
-    region_code: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    tenant_id: Optional[str] = None
+# NOTE: This file contains schemas for v1 API endpoints that are currently unused.
+# DecisionResponse is kept as it may be used when implementing v1 API routes for decision evaluation.
+# Note: There's a different DecisionResponse in decision.py that IS currently used.
+# The following schema was removed as it is not used anywhere:
+# - DecisionRequest
 
 
 class DecisionResponse(BaseModel):

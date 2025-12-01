@@ -15,7 +15,12 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    region: RegionEnum | None = None
+    model_config = ConfigDict(extra="ignore")  # Ignore extra fields instead of forbidding
+    
+    region: RegionEnum | None = Field(
+        default=None,
+        description="Optional region value. Valid values: EU, US, INDIA, ROW, IN, BR, SG, AU, JP, CA, UK, ZA, KR"
+    )
 
 
 class UserResponse(BaseModel):

@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     ADS_WEBHOOK_URL: Optional[str] = None
     EMAIL_WEBHOOK_URL: Optional[str] = None
     LOCATION_WEBHOOK_URL: Optional[str] = None
-
+    
     # Google Analytics Configuration (optional)
     GA_MEASUREMENT_ID: Optional[str] = None
     GA_API_SECRET: Optional[str] = None
-
+    
     # Google Ads Configuration (optional)
     GOOGLE_ADS_CUSTOMER_ID: Optional[str] = None
     GOOGLE_ADS_DEVELOPER_TOKEN: Optional[str] = None
@@ -35,3 +35,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+

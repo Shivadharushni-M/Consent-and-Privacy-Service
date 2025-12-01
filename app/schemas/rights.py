@@ -7,38 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.models.consent import RequestStatusEnum, RequestTypeEnum
 
 
-class ExportRequestCreate(BaseModel):
-    subject_external_id: Optional[str] = Field(None, description="External identifier for the subject (e.g., 'user-123')")
-    subject_id: Optional[UUID] = Field(None, description="Internal UUID of the subject")
-    notification_channel: Optional[Dict[str, str]] = Field(None, description="Notification channel details (e.g., {'type': 'email', 'value': 'user@example.com'})")
-    callback_url: Optional[str] = Field(None, description="Optional callback URL for webhook notifications")
-    tenant_id: Optional[str] = Field(None, description="Tenant identifier for multi-tenant systems")
-    
-    @model_validator(mode='after')
-    def validate_subject_identifier(self):
-        """Ensure at least one subject identifier is provided."""
-        if not self.subject_id and not self.subject_external_id:
-            raise ValueError("At least one of 'subject_id' or 'subject_external_id' must be provided")
-        return self
-
-
-class DeleteRequestCreate(BaseModel):
-    subject_external_id: Optional[str] = Field(None, description="External identifier for the subject (e.g., 'user-123')")
-    subject_id: Optional[UUID] = Field(None, description="Internal UUID of the subject")
-    notification_channel: Optional[Dict[str, str]] = Field(None, description="Notification channel details (e.g., {'type': 'email', 'value': 'user@example.com'})")
-    callback_url: Optional[str] = Field(None, description="Optional callback URL for webhook notifications")
-    tenant_id: Optional[str] = Field(None, description="Tenant identifier for multi-tenant systems")
-    
-    @model_validator(mode='after')
-    def validate_subject_identifier(self):
-        """Ensure at least one subject identifier is provided."""
-        if not self.subject_id and not self.subject_external_id:
-            raise ValueError("At least one of 'subject_id' or 'subject_external_id' must be provided")
-        return self
-
-
-class VerifyRequest(BaseModel):
-    token: str
+# NOTE: This file contains schemas for v1 API endpoints that are currently unused.
+# RightsRequestResponse is kept as it may be used when implementing v1 API routes for subject rights requests.
+# The following schemas were removed as they are not used anywhere:
+# - ExportRequestCreate
+# - DeleteRequestCreate
+# - VerifyRequest
 
 
 class RightsRequestResponse(BaseModel):

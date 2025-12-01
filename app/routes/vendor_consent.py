@@ -28,11 +28,10 @@ def _handle_service_errors(exc: ValueError) -> None:
     raise HTTPException(status_code=400, detail="Invalid request") from exc
 
 
-@router.post("/grant", response_model=VendorConsentResponse, status_code=201, summary="Grant Vendor Consent", description="Grant consent for a specific vendor")
+@router.post("/grant", response_model=VendorConsentResponse, status_code=201)
 def grant_vendor_consent(
     request: CreateVendorConsentRequest, db: Session = Depends(get_db)
 ):
-    """Grant Vendor Consent"""
     try:
         return vendor_consent_service.grant_vendor_consent(
             db=db,
@@ -46,11 +45,10 @@ def grant_vendor_consent(
         _handle_service_errors(exc)
 
 
-@router.post("/revoke", response_model=VendorConsentResponse, status_code=201, summary="Revoke Vendor Consent", description="Revoke consent for a specific vendor")
+@router.post("/revoke", response_model=VendorConsentResponse, status_code=201)
 def revoke_vendor_consent(
     request: CreateVendorConsentRequest, db: Session = Depends(get_db)
 ):
-    """Revoke Vendor Consent"""
     try:
         return vendor_consent_service.revoke_vendor_consent(
             db=db,
@@ -64,13 +62,12 @@ def revoke_vendor_consent(
         _handle_service_errors(exc)
 
 
-@router.get("/history/{user_id}", response_model=List[VendorConsentResponse], summary="Get Vendor Consent History", description="Get vendor consent history for a user")
+@router.get("/history/{user_id}", response_model=List[VendorConsentResponse])
 def get_vendor_consent_history(
     user_id: UUID,
-    vendor: Optional[VendorEnum] = Query(default=None, description="Filter by vendor"),
+    vendor: Optional[VendorEnum] = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    """Get Vendor Consent History"""
     try:
         return vendor_consent_service.get_vendor_history(db=db, user_id=user_id, vendor=vendor)
     except ValueError as exc:

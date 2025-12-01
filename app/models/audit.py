@@ -55,12 +55,5 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
-    # Legacy field for backward compatibility
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
 
-    __table_args__ = (
-        Index("idx_audit_user_created", "user_id", "created_at"),
-        Index("idx_audit_user_timestamp", "user_id", "timestamp"),  # Legacy index
-    )
+    __table_args__ = (Index("idx_audit_user_created", "user_id", "created_at"),)

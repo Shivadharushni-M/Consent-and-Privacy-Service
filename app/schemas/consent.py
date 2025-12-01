@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -9,25 +9,28 @@ from app.models.consent import (
     RegionEnum,
     RequestStatusEnum,
     RequestTypeEnum,
-    RetentionEntityEnum,
     StatusEnum,
 )
 
 
 class CreateConsentRequest(BaseModel):
-    """Create consent request - supports both new (UUID/enums) and old (int/str) formats for backward compatibility"""
-    user_id: Union[UUID, int, str] = Field(..., description="User ID (UUID, integer, or UUID string)")
-    purpose: Union[PurposeEnum, str] = Field(..., description="Purpose (enum or string)")
-    region: Union[RegionEnum, str] = Field(..., description="Region (enum or string)")
+    user_id: UUID
+    purpose: PurposeEnum
+    region: RegionEnum
     expires_at: Optional[datetime] = None
     expires_in_days: Optional[int] = Field(None, gt=0, description="Number of days until consent expires")
-    policy_snapshot: Optional[Dict[str, Any]] = None  # For backward compatibility
+    policy_snapshot: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def validate_expiry(self):
         """Ensure only one expiry method is provided."""
         if self.expires_at and self.expires_in_days:
-            raise ValueError("Cannot specify both expires_at and expires_in_days")
+            raise ValueError(
+                "Cannot specify both 'expires_at' and 'expires_in_days'. "
+                "Please provide only one:\n"
+                "- Use 'expires_at' to set a specific expiration date/time\n"
+                "- Use 'expires_in_days' to set expiration relative to now (e.g., expires_in_days: 1)"
+            )
         return self
 
     def get_expires_at(self) -> Optional[datetime]:
@@ -41,50 +44,39 @@ class CreateConsentRequest(BaseModel):
 
 
 class ConsentResponse(BaseModel):
-    """Consent response - supports both new and old model structures"""
     model_config = ConfigDict(from_attributes=True)
 
-    id: Union[UUID, int]  # Support both UUID and int for backward compatibility
-    user_id: Union[UUID, int, str]  # Support UUID, int, or string
-    purpose: Union[PurposeEnum, str]  # Support enum or string
-    status: Union[StatusEnum, str]  # Support enum or string
-    region: Union[RegionEnum, str]  # Support enum or string
+    id: UUID
+    user_id: UUID
+    purpose: PurposeEnum
+    status: StatusEnum
+    region: RegionEnum
     timestamp: datetime
     expires_at: Optional[datetime] = None
     policy_snapshot: Optional[Dict[str, Any]] = None
 
 
 class AuditLogResponse(BaseModel):
-    """Audit log response"""
-    model_config = ConfigDict(from_attributes=True)
-
-    id: Union[UUID, int]  # Support both UUID and int
-    user_id: Optional[Union[UUID, int]] = None
-    action: str
-    details: Optional[Dict[str, Any]] = None  # Optional for backward compatibility
-    created_at: Optional[datetime] = None
-    timestamp: Optional[datetime] = None  # Legacy field
-    policy_snapshot: Optional[Dict[str, Any]] = None
-
-
-class RetentionScheduleCreate(BaseModel):
-    entity_type: RetentionEntityEnum
-    retention_days: int = Field(..., gt=0)
-    active: bool = True
-
-
-class RetentionScheduleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    entity_type: RetentionEntityEnum
-    retention_days: int
-    active: bool
+    user_id: Optional[UUID] = None
+    action: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    policy_snapshot: Optional[Dict[str, Any]] = None
 
-
-class SubjectRequestCreate(BaseModel):
-    user_id: UUID
-    request_type: RequestTypeEnum
+    @model_validator(mode="before")
+    @classmethod
+    def handle_none_details(cls, data: Any) -> Any:
+        """Convert None details to empty dict."""
+        # Handle dict input (from JSON)
+        if isinstance(data, dict) and data.get("details") is None:
+            data["details"] = {}
+        # Handle SQLAlchemy model instance (from_attributes=True)
+        elif hasattr(data, "details") and data.details is None:
+            data.details = {}
+        return data
 
 
 class SubjectRequestResponse(BaseModel):

@@ -12,7 +12,7 @@ router = APIRouter(
 )
 
 
-@router.get("/run", summary="Trigger Retention Cleanup", description="Manually trigger the retention cleanup job")
+@router.get("/run")
 def trigger_retention_cleanup(db: Session = Depends(get_db)):
-    """Trigger Retention Cleanup - Manually run the retention cleanup job"""
+    """Trigger the retention cleanup job manually."""
     return run_retention_cleanup(db)

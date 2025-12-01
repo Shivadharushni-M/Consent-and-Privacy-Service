@@ -16,6 +16,31 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import InternalError, OperationalError
+    
+    conn = op.get_bind()
+    
+    # Helper function to check if trigger exists
+    def trigger_exists(trigger_name: str, table_name: str) -> bool:
+        try:
+            result = conn.execute(text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_trigger t
+                    JOIN pg_class c ON t.tgrelid = c.oid
+                    WHERE t.tgname = :trigger_name
+                    AND c.relname = :table_name
+                )
+            """), {"trigger_name": trigger_name, "table_name": table_name})
+            return result.scalar() or False
+        except (InternalError, OperationalError) as e:
+            # If transaction is aborted, return False to be safe
+            if "current transaction is aborted" in str(e).lower():
+                return False
+            raise
+        except Exception:
+            return False
+    
     # Create a function to prevent UPDATE on audit_logs
     op.execute("""
         CREATE OR REPLACE FUNCTION prevent_audit_log_update()
@@ -36,21 +61,23 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql;
     """)
     
-    # Create trigger to prevent UPDATE
-    op.execute("""
-        CREATE TRIGGER audit_logs_prevent_update
-        BEFORE UPDATE ON audit_logs
-        FOR EACH ROW
-        EXECUTE FUNCTION prevent_audit_log_update();
-    """)
+    # Create trigger to prevent UPDATE (only if it doesn't exist)
+    if not trigger_exists("audit_logs_prevent_update", "audit_logs"):
+        op.execute("""
+            CREATE TRIGGER audit_logs_prevent_update
+            BEFORE UPDATE ON audit_logs
+            FOR EACH ROW
+            EXECUTE FUNCTION prevent_audit_log_update();
+        """)
     
-    # Create trigger to prevent DELETE
-    op.execute("""
-        CREATE TRIGGER audit_logs_prevent_delete
-        BEFORE DELETE ON audit_logs
-        FOR EACH ROW
-        EXECUTE FUNCTION prevent_audit_log_delete();
-    """)
+    # Create trigger to prevent DELETE (only if it doesn't exist)
+    if not trigger_exists("audit_logs_prevent_delete", "audit_logs"):
+        op.execute("""
+            CREATE TRIGGER audit_logs_prevent_delete
+            BEFORE DELETE ON audit_logs
+            FOR EACH ROW
+            EXECUTE FUNCTION prevent_audit_log_delete();
+        """)
 
 
 def downgrade() -> None:

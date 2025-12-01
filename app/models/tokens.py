@@ -14,6 +14,7 @@ from app.db.types import GUID, JSONBType
 class TokenPurposeEnum(str, enum.Enum):
     RIGHTS_EXPORT = "rights_export"
     RIGHTS_DELETION = "rights_deletion"
+    RIGHTS_ACCESS = "rights_access"
 
 
 class VerificationToken(Base):

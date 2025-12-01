@@ -7,17 +7,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 from app.models.consent import RegionEnum
 
 
-class SubjectCreate(BaseModel):
-    external_id: Optional[str] = None
-    identifier_type: Optional[str] = None
-    identifier_value: Optional[str] = None
-    region_code: Optional[RegionEnum] = None
-    tenant_id: Optional[str] = None
-
-
-class SubjectUpdate(BaseModel):
-    identifier_type: Optional[str] = None
-    identifier_value: Optional[str] = None
+# NOTE: This file contains schemas for v1 API endpoints that are currently unused.
+# SubjectResponse is kept as it may be used when implementing v1 API routes for subject management.
+# The following schemas were removed as they are not used anywhere:
+# - SubjectCreate
+# - SubjectUpdate
 
 
 class SubjectResponse(BaseModel):

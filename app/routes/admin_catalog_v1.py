@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,8 +27,23 @@ router = APIRouter(
 
 
 # Purposes
-@router.post("/purposes", response_model=PurposeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/purposes",
+    response_model=PurposeResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Purpose",
+    description="Create a new purpose in the catalog. A purpose represents a specific use case for data processing."
+)
 def create_purpose(purpose: PurposeCreate, db: Session = Depends(get_db)):
+    # Validate purpose_group_id if provided
+    if purpose.purpose_group_id:
+        purpose_group = db.get(PurposeGroup, purpose.purpose_group_id)
+        if not purpose_group:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Purpose group with ID '{purpose.purpose_group_id}' not found"
+            )
+    
     try:
         new_purpose = Purpose(
             tenant_id=purpose.tenant_id,
@@ -43,21 +58,45 @@ def create_purpose(purpose: PurposeCreate, db: Session = Depends(get_db)):
         return new_purpose
     except IntegrityError as exc:
         db.rollback()
-        if "code" in str(exc.orig):
+        error_str = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        
+        # Check for duplicate code
+        if "code" in error_str.lower() or "unique" in error_str.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Purpose with code '{purpose.code}' already exists"
             ) from exc
+        
+        # Check for foreign key constraint
+        if "foreign key" in error_str.lower() or "purpose_group" in error_str.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid purpose_group_id: '{purpose.purpose_group_id}' does not exist"
+            ) from exc
+        
+        # Generic integrity error with more details
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to create purpose"
+            detail=f"Failed to create purpose: {error_str}"
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        error_str = str(exc) if exc else "Unknown error"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error creating purpose: {error_str}"
         ) from exc
 
 
-@router.get("/purposes", response_model=List[PurposeResponse])
+@router.get(
+    "/purposes",
+    response_model=List[PurposeResponse],
+    summary="List Purposes",
+    description="Retrieve a list of all purposes. Can be filtered by tenant_id and active status."
+)
 def list_purposes(
-    tenant_id: Optional[str] = None,
-    active: Optional[bool] = None,
+    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
+    active: Optional[bool] = Query(None, description="Filter by active status (true/false)"),
     db: Session = Depends(get_db),
 ):
     query = db.query(Purpose)
@@ -68,7 +107,12 @@ def list_purposes(
     return query.all()
 
 
-@router.patch("/purposes/{purpose_id}", response_model=PurposeResponse)
+@router.patch(
+    "/purposes/{purpose_id}",
+    response_model=PurposeResponse,
+    summary="Update Purpose",
+    description="Update an existing purpose. Only provided fields will be updated."
+)
 def update_purpose(
     purpose_id: UUID,
     payload: PurposeUpdate,
@@ -93,7 +137,13 @@ def update_purpose(
 
 
 # Purpose Groups
-@router.post("/purpose-groups", response_model=PurposeGroupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/purpose-groups",
+    response_model=PurposeGroupResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Purpose Group",
+    description="Create a new purpose group. Purpose groups are used to organize related purposes together."
+)
 def create_purpose_group(group: PurposeGroupCreate, db: Session = Depends(get_db)):
     try:
         new_group = PurposeGroup(
@@ -109,20 +159,37 @@ def create_purpose_group(group: PurposeGroupCreate, db: Session = Depends(get_db
         return new_group
     except IntegrityError as exc:
         db.rollback()
-        if "code" in str(exc.orig):
+        error_str = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        
+        # Check for duplicate code
+        if "code" in error_str.lower() or "unique" in error_str.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Purpose group with code '{group.code}' already exists"
             ) from exc
+        
+        # Generic integrity error with more details
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to create purpose group"
+            detail=f"Failed to create purpose group: {error_str}"
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        error_str = str(exc) if exc else "Unknown error"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error creating purpose group: {error_str}"
         ) from exc
 
 
-@router.get("/purpose-groups", response_model=List[PurposeGroupResponse])
+@router.get(
+    "/purpose-groups",
+    response_model=List[PurposeGroupResponse],
+    summary="List Purpose Groups",
+    description="Retrieve a list of all purpose groups. Results are ordered by precedence. Can be filtered by tenant_id."
+)
 def list_purpose_groups(
-    tenant_id: Optional[str] = None,
+    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
     db: Session = Depends(get_db),
 ):
     query = db.query(PurposeGroup)
@@ -132,7 +199,13 @@ def list_purpose_groups(
 
 
 # Vendors
-@router.post("/vendors", response_model=VendorResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/vendors",
+    response_model=VendorResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Vendor",
+    description="Create a new vendor in the catalog. Vendors represent third-party entities that process data."
+)
 def create_vendor(vendor: VendorCreate, db: Session = Depends(get_db)):
     try:
         new_vendor = Vendor(
@@ -148,20 +221,37 @@ def create_vendor(vendor: VendorCreate, db: Session = Depends(get_db)):
         return new_vendor
     except IntegrityError as exc:
         db.rollback()
-        if "code" in str(exc.orig):
+        error_str = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        
+        # Check for duplicate code
+        if "code" in error_str.lower() or "unique" in error_str.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Vendor with code '{vendor.code}' already exists"
             ) from exc
+        
+        # Generic integrity error with more details
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to create vendor"
+            detail=f"Failed to create vendor: {error_str}"
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        error_str = str(exc) if exc else "Unknown error"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error creating vendor: {error_str}"
         ) from exc
 
 
-@router.get("/vendors", response_model=List[VendorResponse])
+@router.get(
+    "/vendors",
+    response_model=List[VendorResponse],
+    summary="List Vendors",
+    description="Retrieve a list of all vendors. Can be filtered by tenant_id."
+)
 def list_vendors(
-    tenant_id: Optional[str] = None,
+    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
     db: Session = Depends(get_db),
 ):
     query = db.query(Vendor)

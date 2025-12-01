@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.schemas.consent import ConsentResponse, CreateConsentRequest
-from app.schemas.common import PreferencesUpdateRequest
+from app.schemas.preferences import PreferencesResponse, PreferencesUpdateRequest
 from app.services import consent_service
+from app.services.preferences_service import update_preferences
 from app.utils.security import api_key_auth
 
 router = APIRouter(
@@ -18,16 +19,27 @@ router = APIRouter(
 
 
 def _handle_service_errors(exc: Exception) -> None:
-    error_str = str(exc)
+    """Handle service errors and convert them to HTTPExceptions."""
+    # Ensure we always get a string representation
+    try:
+        error_str = str(exc) if exc else "Unknown error"
+    except Exception:
+        error_str = f"Error of type {type(exc).__name__}"
+    
+    # Handle specific error codes
     if error_str == "user_not_found":
         raise HTTPException(status_code=404, detail="User not found") from exc
     if error_str == "invalid_region":
         raise HTTPException(status_code=422, detail="Invalid region") from exc
-    if error_str == "database_error":
-        raise HTTPException(status_code=500, detail="Database error occurred") from exc
-    # For other ValueError exceptions, use the message
+    if error_str.startswith("database_error"):
+        # Extract the actual error message if available
+        detail = error_str.replace("database_error: ", "") if "database_error: " in error_str else "Database error occurred"
+        raise HTTPException(status_code=500, detail=detail) from exc
+    
+    # For ValueError exceptions, use the message
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=400, detail=error_str) from exc
+    
     # For any other exception, return a generic error
     raise HTTPException(status_code=500, detail=f"Internal server error: {error_str}") from exc
 
@@ -35,71 +47,42 @@ def _handle_service_errors(exc: Exception) -> None:
 @router.post("/grant", response_model=ConsentResponse, status_code=201)
 def grant_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
     try:
-        # Try new service signature first (with expires_at)
-        if hasattr(request, 'get_expires_at'):
-            return consent_service.grant_consent(
-                db=db,
-                user_id=request.user_id,
-                purpose=request.purpose,
-                region=request.region,
-                expires_at=request.get_expires_at(),
-            )
-        else:
-            # Fallback to old signature (with policy_snapshot)
-            return consent_service.grant_consent(
-                db=db,
-                user_id=request.user_id,
-                purpose=request.purpose,
-                region=request.region,
-                policy_snapshot=getattr(request, 'policy_snapshot', None)
-            )
+        # Get expires_at from the request
+        expires_at = request.get_expires_at()
+        
+        return consent_service.grant_consent(
+            db=db,
+            user_id=request.user_id,
+            purpose=request.purpose,
+            region=request.region,
+            expires_at=expires_at,
+        )
+    except ValueError as exc:
+        # Handle ValueError specifically
+        _handle_service_errors(exc)
     except Exception as exc:
+        # Handle any other exceptions
         _handle_service_errors(exc)
 
 
 @router.post("/revoke", response_model=ConsentResponse, status_code=201)
 def revoke_consent(request: CreateConsentRequest, db: Session = Depends(get_db)):
     try:
-        # Try new service signature first (with expires_at)
-        if hasattr(request, 'get_expires_at'):
-            return consent_service.revoke_consent(
-                db=db,
-                user_id=request.user_id,
-                purpose=request.purpose,
-                region=request.region,
-                expires_at=request.get_expires_at(),
-            )
-        else:
-            # Fallback to old signature (with policy_snapshot)
-            return consent_service.revoke_consent(
-                db=db,
-                user_id=request.user_id,
-                purpose=request.purpose,
-                region=request.region,
-                policy_snapshot=getattr(request, 'policy_snapshot', None)
-            )
+        return consent_service.revoke_consent(
+            db=db,
+            user_id=request.user_id,
+            purpose=request.purpose,
+            region=request.region,
+            expires_at=request.get_expires_at() if hasattr(request, 'get_expires_at') else None,
+        )
     except Exception as exc:
         _handle_service_errors(exc)
 
 
 @router.get("/history/{user_id}", response_model=List[ConsentResponse])
-def get_consent_history(user_id: str, db: Session = Depends(get_db)):
-    """Get consent history - accepts both UUID string and integer string for backward compatibility"""
+def get_consent_history(user_id: UUID, db: Session = Depends(get_db)):
     try:
-        # Try to parse as UUID first
-        try:
-            user_uuid = UUID(user_id)
-            return consent_service.get_history(db=db, user_id=user_uuid)
-        except ValueError:
-            # If not a valid UUID, try as integer (for backward compatibility)
-            try:
-                int_id = int(user_id)
-                if int_id <= 0:
-                    raise HTTPException(status_code=400, detail="Invalid user_id")
-                # Convert integer to UUID for service call
-                return consent_service.get_history(db=db, user_id=user_id)
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid user_id format")
+        return consent_service.get_history(db=db, user_id=user_id)
     except Exception as exc:
         _handle_service_errors(exc)
 
@@ -112,15 +95,13 @@ def read_preferences(user_id: str, db: Session = Depends(get_db)):
     """Read Preferences"""
     return {"user_id": user_id, "preferences": {}}
 
-@preferences_router.post("/update", status_code=201)
+@preferences_router.post("/update", response_model=PreferencesResponse, status_code=201)
 def post_update_preferences(request: PreferencesUpdateRequest, db: Session = Depends(get_db)):
     """Post Update Preferences"""
     try:
-        return {
-            "message": "Preferences updated",
-            "user_id": request.user_id,
-            "preferences": request.preferences,
-            "metadata": request.metadata
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        region, preferences = update_preferences(db, request.user_id, request.updates)
+        return {"user_id": request.user_id, "region": region, "preferences": preferences}
+    except ValueError as exc:
+        _handle_service_errors(exc)
+    except Exception as exc:
+        _handle_service_errors(exc)

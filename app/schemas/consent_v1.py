@@ -7,40 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.consent import PurposeEnum, RegionEnum, StatusEnum
 
 
-class ConsentCreate(BaseModel):
-    subject_external_id: Optional[str] = None
-    subject_id: Optional[UUID] = None
-    purpose_code: str
-    vendor_code: Optional[str] = None
-    legal_basis: Optional[str] = None
-    status: str
-    region_code: str
-    valid_from: Optional[datetime] = None
-    valid_until: Optional[datetime] = None
-    policy_version_id: Optional[UUID] = None
-    source: Optional[str] = None
-    user_agent: Optional[str] = None
-    ip_address: Optional[str] = None
-    meta: Optional[Dict[str, Any]] = None
-    tenant_id: Optional[str] = None
-
-
-class ConsentQuery(BaseModel):
-    subject_id: Optional[UUID] = None
-    subject_external_id: Optional[str] = None
-    purpose_code: Optional[str] = None
-    vendor_code: Optional[str] = None
-    status: Optional[str] = None
-    tenant_id: Optional[str] = None
-
-
-class ConsentRevoke(BaseModel):
-    subject_external_id: Optional[str] = None
-    subject_id: Optional[UUID] = None
-    purpose_code: str
-    vendor_code: Optional[str] = None
-    reason: Optional[str] = None
-    tenant_id: Optional[str] = None
+# NOTE: This file contains schemas for v1 API endpoints that are currently unused.
+# ConsentRecordResponse is kept as it may be used when implementing v1 API routes for consent management.
+# The following schemas were removed as they are not used anywhere:
+# - ConsentCreate
+# - ConsentQuery  
+# - ConsentRevoke
 
 
 class ConsentRecordResponse(BaseModel):

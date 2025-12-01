@@ -11,18 +11,17 @@ from app.services.region_service import detect_region_from_ip
 from app.utils.helpers import extract_client_ip
 from app.utils.security import api_key_auth
 
-router = APIRouter(prefix="/decision", tags=["decision"], dependencies=[Depends(api_key_auth)])
+router = APIRouter(tags=["decision"], dependencies=[Depends(api_key_auth)])
 
 
-@router.get("", response_model=DecisionResponse, summary="Get Decision", description="Get consent decision for a user and purpose")
+@router.get("/decision", response_model=DecisionResponse)
 def get_decision(
     request: Request,
-    user_id: UUID = Query(..., description="User ID"),
-    purpose: PurposeEnum = Query(..., description="Purpose"),
-    vendor: VendorEnum = Query(default=None, description="Vendor (optional)"),
+    user_id: UUID = Query(...),
+    purpose: PurposeEnum = Query(...),
+    vendor: VendorEnum = Query(default=None),
     db: Session = Depends(get_db),
 ) -> DecisionResponse:
-    """Get Decision - Determines consent decision based on user, purpose, and region"""
     fallback_region = detect_region_from_ip(extract_client_ip(request))
     try:
         return decide(

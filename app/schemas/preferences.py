@@ -14,11 +14,6 @@ class PreferencesResponse(BaseModel):
     preferences: Dict[PurposeEnum, StatusEnum]
 
 
-class PreferenceUpdateItem(BaseModel):
-    purpose: PurposeEnum
-    status: StatusEnum
-
-
 class PreferencesUpdateRequest(BaseModel):
     user_id: UUID
     updates: Dict[PurposeEnum, StatusEnum]

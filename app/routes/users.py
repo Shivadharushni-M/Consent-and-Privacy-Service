@@ -28,38 +28,43 @@ def _handle_service_error(exc: ValueError) -> None:
     raise HTTPException(status_code=detail[0], detail=detail[1]) from exc
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="Create User", description="Create a new user")
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db)):
-    """Create User - Auto-detects region from IP if not provided"""
     try:
         # Auto-detect region from IP if not provided
         if user.region is None:
             client_ip = extract_client_ip(request)
             detected_region = detect_region_from_ip(client_ip)
             user.region = detected_region
-
+        
         return user_service.create_user(db=db, email=user.email, region=user.region)
     except ValueError as exc:
         _handle_service_error(exc)
 
 
-@router.get("/{user_id}", response_model=UserResponse, summary="Get User", description="Get user by ID")
+@router.get("/{user_id}", response_model=UserResponse)
 def get_user(user_id: UUID, db: Session = Depends(get_db)):
-    """Get User"""
     try:
         return user_service.get_user(db=db, user_id=user_id)
     except ValueError as exc:
         _handle_service_error(exc)
 
 
-@router.patch("/{user_id}", response_model=UserResponse, summary="Update User", description="Update user information")
+@router.patch("/{user_id}", response_model=UserResponse)
 def update_user(user_id: UUID, payload: UserUpdate, db: Session = Depends(get_db)):
-    """Update User"""
+    """
+    Update user information. Currently supports updating the region.
+    If region is not provided, returns the current user without changes.
+    """
+    # Allow partial updates - only update region if provided
     if payload.region is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Region is required. Provide a valid region value (e.g., 'EU', 'US', 'INDIA', etc.)"
-        )
+        # If no region provided, just return the current user (no-op update)
+        try:
+            return user_service.get_user(db=db, user_id=user_id)
+        except ValueError as exc:
+            _handle_service_error(exc)
+    
+    # Update region if provided
     try:
         return user_service.update_region(db=db, user_id=user_id, region=payload.region)
     except ValueError as exc:

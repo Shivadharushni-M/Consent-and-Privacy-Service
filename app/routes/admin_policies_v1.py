@@ -23,7 +23,7 @@ router = APIRouter(
 )
 
 
-@router.post("", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED, summary="Create Policy", description="Create a new policy with the specified name, description, region code, and optional tenant ID")
 def create_policy(policy: PolicyCreate, db: Session = Depends(get_db)):
     new_policy = Policy(
         tenant_id=policy.tenant_id,
@@ -37,10 +37,10 @@ def create_policy(policy: PolicyCreate, db: Session = Depends(get_db)):
     return new_policy
 
 
-@router.get("", response_model=List[PolicyResponse])
+@router.get("", response_model=List[PolicyResponse], summary="List Policies", description="Retrieve a list of policies, optionally filtered by region_code and/or tenant_id")
 def list_policies(
-    region_code: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    region_code: Optional[str] = Query(None, description="Filter by region code (e.g., EU, US, INDIA)"),
+    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
     db: Session = Depends(get_db),
 ):
     query = db.query(Policy)
@@ -51,7 +51,7 @@ def list_policies(
     return query.all()
 
 
-@router.post("/{policy_id}/versions", response_model=PolicyVersionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{policy_id}/versions", response_model=PolicyVersionResponse, status_code=status.HTTP_201_CREATED, summary="Create Policy Version", description="Create a new version for an existing policy with effective dates and policy matrix data")
 def create_policy_version(
     policy_id: UUID,
     version: PolicyVersionCreate,
@@ -82,7 +82,7 @@ def create_policy_version(
     return new_version
 
 
-@router.get("/{policy_id}/versions", response_model=List[PolicyVersionResponse])
+@router.get("/{policy_id}/versions", response_model=List[PolicyVersionResponse], summary="List Policy Versions", description="Retrieve all versions for a specific policy")
 def list_policy_versions(policy_id: UUID, db: Session = Depends(get_db)):
     policy = db.get(Policy, policy_id)
     if not policy:
@@ -90,7 +90,7 @@ def list_policy_versions(policy_id: UUID, db: Session = Depends(get_db)):
     return db.query(PolicyVersion).filter(PolicyVersion.policy_id == policy_id).all()
 
 
-@router.get("/{policy_id}/versions/{version_id}", response_model=PolicyVersionResponse)
+@router.get("/{policy_id}/versions/{version_id}", response_model=PolicyVersionResponse, summary="Get Policy Version", description="Retrieve a specific version of a policy by policy ID and version ID")
 def get_policy_version(policy_id: UUID, version_id: UUID, db: Session = Depends(get_db)):
     version = db.get(PolicyVersion, version_id)
     if not version or version.policy_id != policy_id:
@@ -98,37 +98,13 @@ def get_policy_version(policy_id: UUID, version_id: UUID, db: Session = Depends(
     return version
 
 
-@router.get("/snapshots", response_model=List[PolicyVersionResponse])
+@router.get("/snapshots", response_model=List[PolicyVersionResponse], summary="Get Policy Snapshots", description="Retrieve policy snapshots (active policy versions) filtered by region, timestamp, and/or tenant. Returns policy versions that are effective at the specified timestamp (or current time if not specified)")
 def get_policy_snapshots(
-    region_code: Optional[str] = Query(None),
-    timestamp: Optional[datetime] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    region_code: Optional[str] = Query(None, description="Filter by region code (e.g., EU, US, INDIA)"),
+    timestamp: Optional[datetime] = Query(None, description="Get snapshots effective at this timestamp (ISO 8601 format). If not provided, uses current time"),
+    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
     db: Session = Depends(get_db),
 ):
-    query = db.query(PolicyVersion).join(Policy)
-    
-    if region_code:
-        query = query.filter(Policy.region_code == region_code)
-    if tenant_id:
-        query = query.filter(Policy.tenant_id == tenant_id)
-    if timestamp:
-        query = query.filter(
-            PolicyVersion.effective_from <= timestamp,
-            (PolicyVersion.effective_to.is_(None) | (PolicyVersion.effective_to > timestamp))
-        )
-    
-    return query.all()
-
-
-# Add the spec-required endpoint at /api/v1/admin/policy-snapshots
-@router.get("/policy-snapshots", response_model=List[PolicyVersionResponse])
-def get_policy_snapshots_alt(
-    region_code: Optional[str] = Query(None),
-    timestamp: Optional[datetime] = Query(None),
-    tenant_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
-    """Alternative endpoint path as specified in PRD: /api/v1/admin/policy-snapshots"""
     query = db.query(PolicyVersion).join(Policy)
     
     if region_code:
