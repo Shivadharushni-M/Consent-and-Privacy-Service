@@ -95,43 +95,18 @@ _PREPARED_RANGES = tuple((ip_network(cidr), iso) for cidr, iso in LIGHTWEIGHT_IP
 
 
 def detect_region_from_ip(ip: Optional[str]) -> RegionEnum:
-    """
-    Determine the user's region based on IP address.
-
-    Always falls back to mock detection (ROW) to avoid raising exceptions.
-    If localhost is detected, attempts to fetch public IP for accurate detection.
-    """
-
+    """Determine the user's region based on IP address."""
     normalized_ip = (ip or "").strip()
-
-    # If localhost, try to get public IP
-    is_localhost = _is_local_ip(normalized_ip)
-    if is_localhost:
+    if _is_local_ip(normalized_ip):
         public_ip = _get_public_ip()
-        if public_ip and not _is_local_ip(public_ip):
-            normalized_ip = public_ip
-        else:
-            # If can't get public IP or it's still localhost, try lightweight first
-            # This handles cases where public IP lookup fails
-            # For localhost without public IP, return ROW
-            if not public_ip:
-                return RegionEnum.ROW
-            # If public IP is still localhost, return ROW
-            return RegionEnum.ROW
-
-    # Try lightweight detection first (faster and more reliable for known ranges)
-    # This takes precedence over MaxMind to ensure India ranges are detected correctly
-    lightweight_result = _lightweight_region(normalized_ip)
-    if lightweight_result != RegionEnum.ROW:
-        return lightweight_result
-    
-    # Fall back to MaxMind if lightweight didn't match
-    # But only if MaxMind is available and returns a valid result
-    maxmind_region = _detect_with_maxmind(normalized_ip)
-    if maxmind_region is not None and maxmind_region != RegionEnum.ROW:
-        return maxmind_region
-
-    return RegionEnum.ROW
+        normalized_ip = public_ip if public_ip and not _is_local_ip(public_ip) else ""
+    if not normalized_ip:
+        return RegionEnum.ROW
+    result = _lightweight_region(normalized_ip)
+    if result != RegionEnum.ROW:
+        return result
+    maxmind_result = _detect_with_maxmind(normalized_ip)
+    return maxmind_result if maxmind_result and maxmind_result != RegionEnum.ROW else RegionEnum.ROW
 
 
 def _detect_with_maxmind(ip: str) -> Optional[RegionEnum]:
@@ -186,10 +161,11 @@ def _map_iso_to_region(iso_code: Optional[str]) -> RegionEnum:
 
 
 def _is_local_ip(ip: str) -> bool:
+    """Check if IP is localhost or private network."""
     if not ip:
         return True
     normalized = ip.lower()
-    return normalized.startswith("127.") or normalized.startswith("localhost") or normalized == "::1" or normalized.startswith("192.168.") or normalized.startswith("10.") or normalized.startswith("172.16.")
+    return normalized.startswith(("127.", "localhost", "192.168.", "10.", "172.16.")) or normalized == "::1"
 
 
 def _get_public_ip() -> Optional[str]:

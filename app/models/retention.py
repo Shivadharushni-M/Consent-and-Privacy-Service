@@ -30,9 +30,6 @@ class RetentionRule(Base):
     applies_to_region: Mapped[Optional[RegionEnum]] = mapped_column(
         String(10), nullable=True, index=True
     )
-    applies_to_legal_basis: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True, index=True
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

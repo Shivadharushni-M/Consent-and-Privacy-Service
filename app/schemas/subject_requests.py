@@ -1,8 +1,6 @@
 from typing import Any, Dict, List
 from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, EmailStr
-
 from app.models.consent import RegionEnum, RequestStatusEnum, RequestTypeEnum
 from app.schemas.consent import ConsentResponse
 
@@ -33,10 +31,13 @@ class DataExportResponse(BaseModel):
 
 
 class DataAccessResponse(BaseModel):
-    """Simplified response for GDPR Right of Access - view data only."""
     user_id: UUID
     email: str
     region: RegionEnum
-    purposes: Dict[str, str]  # purpose -> status mapping
+    purposes: Dict[str, str]
 
+
+class VerifyTokenRequest(BaseModel):
+    token: str
+    request_id: UUID
 

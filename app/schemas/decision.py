@@ -1,8 +1,6 @@
 from typing import Any, Dict
 from uuid import UUID
-
 from pydantic import BaseModel
-
 from app.models.consent import PurposeEnum, RegionEnum
 
 

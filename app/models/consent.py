@@ -29,26 +29,6 @@ class PurposeEnum(str, enum.Enum):
     DATA_SHARING = "data_sharing"
 
 
-class VendorEnum(str, enum.Enum):
-    GOOGLE = "google"
-    FACEBOOK = "facebook"
-    SENDGRID = "sendgrid"
-    MAILGUN = "mailgun"
-    TWILIO = "twilio"
-    STRIPE = "stripe"
-    AWS = "aws"
-    AZURE = "azure"
-
-
-class EventNameEnum(str, enum.Enum):
-    PAGE_VIEW = "page_view"
-    PURCHASE = "purchase"
-    SIGNUP = "signup"
-    AD_CLICK = "ad_click"
-    NEWSLETTER_OPEN = "newsletter_open"
-    LOCATION_PING = "location_ping"
-
-
 class StatusEnum(str, enum.Enum):
     GRANTED = "granted"
     DENIED = "denied"
@@ -127,18 +107,6 @@ class User(Base):
     subject_requests: Mapped[List["SubjectRequest"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    vendor_consents: Mapped[List["VendorConsent"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-
-
-class LegalBasisEnum(str, enum.Enum):
-    CONSENT = "consent"
-    CONTRACT = "contract"
-    LEGITIMATE_INTEREST = "legitimate_interest"
-    VITAL_INTERESTS = "vital_interests"
-    PUBLIC_TASK = "public_task"
-    LEGAL_OBLIGATION = "legal_obligation"
 
 
 class ConsentHistory(Base):
@@ -152,8 +120,6 @@ class ConsentHistory(Base):
     purpose: Mapped[PurposeEnum] = mapped_column(
         SQLEnum(PurposeEnum, name="purpose_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
     )
-    vendor_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID, nullable=True, index=True)
-    legal_basis: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[StatusEnum] = mapped_column(
         SQLEnum(StatusEnum, name="status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
@@ -175,7 +141,6 @@ class ConsentHistory(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
-    policy_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID, nullable=True, index=True)
     policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONBType, nullable=True
     )
@@ -240,39 +205,4 @@ class SubjectRequest(Base):
     __table_args__ = (Index("idx_user_request_type", "user_id", "request_type"),)
 
 
-class VendorConsent(Base):
-    __tablename__ = "vendor_consents"
-
-    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    vendor: Mapped[VendorEnum] = mapped_column(
-        SQLEnum(VendorEnum, name="vendor_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
-    )
-    purpose: Mapped[PurposeEnum] = mapped_column(
-        SQLEnum(PurposeEnum, name="purpose_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
-    )
-    status: Mapped[StatusEnum] = mapped_column(
-        SQLEnum(StatusEnum, name="status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
-    region: Mapped[RegionEnum] = mapped_column(
-        SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
-    policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONBType, nullable=True
-    )
-
-    user: Mapped["User"] = relationship(back_populates="vendor_consents")
-
-    __table_args__ = (
-        Index("idx_user_vendor_purpose", "user_id", "vendor", "purpose"),
-        Index("idx_user_vendor_timestamp", "user_id", "vendor", "timestamp"),
-    )
 

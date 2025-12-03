@@ -1,16 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from app.models.consent import (
-    PurposeEnum,
-    RegionEnum,
-    RequestStatusEnum,
-    RequestTypeEnum,
-    StatusEnum,
-)
+from app.models.consent import PurposeEnum, RegionEnum, StatusEnum
 
 
 class CreateConsentRequest(BaseModel):
@@ -23,18 +15,11 @@ class CreateConsentRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_expiry(self):
-        """Ensure only one expiry method is provided."""
         if self.expires_at and self.expires_in_days:
-            raise ValueError(
-                "Cannot specify both 'expires_at' and 'expires_in_days'. "
-                "Please provide only one:\n"
-                "- Use 'expires_at' to set a specific expiration date/time\n"
-                "- Use 'expires_in_days' to set expiration relative to now (e.g., expires_in_days: 1)"
-            )
+            raise ValueError("Cannot specify both 'expires_at' and 'expires_in_days'. Please provide only one:\n- Use 'expires_at' to set a specific expiration date/time\n- Use 'expires_in_days' to set expiration relative to now (e.g., expires_in_days: 1)")
         return self
 
     def get_expires_at(self) -> Optional[datetime]:
-        """Calculate expires_at from expires_in_days if provided."""
         if self.expires_at:
             return self.expires_at
         if self.expires_in_days:
@@ -69,22 +54,10 @@ class AuditLogResponse(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def handle_none_details(cls, data: Any) -> Any:
-        """Convert None details to empty dict."""
-        # Handle dict input (from JSON)
         if isinstance(data, dict) and data.get("details") is None:
             data["details"] = {}
-        # Handle SQLAlchemy model instance (from_attributes=True)
         elif hasattr(data, "details") and data.details is None:
             data.details = {}
         return data
 
 
-class SubjectRequestResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    user_id: UUID
-    request_type: RequestTypeEnum
-    status: RequestStatusEnum
-    requested_at: datetime
-    completed_at: Optional[datetime]
