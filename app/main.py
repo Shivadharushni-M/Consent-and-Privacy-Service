@@ -37,6 +37,7 @@ def _shutdown_scheduler() -> None:
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
     app = FastAPI(
         title="Consent & Privacy Preferences Service",
         version="1.0.0",
