@@ -117,6 +117,17 @@ def create_app() -> FastAPI:
     def _shutdown() -> None:
         _shutdown_scheduler()
 
+    @app.get("/", tags=["system"])
+    def root():
+        """Root endpoint with service information."""
+        return {
+            "service": "Consent & Privacy Preferences Service",
+            "version": "1.0.0",
+            "status": "running",
+            "docs": "/docs",
+            "health": "/health"
+        }
+
     @app.get("/health", tags=["system"])
     def health_check():
         from sqlalchemy import text
