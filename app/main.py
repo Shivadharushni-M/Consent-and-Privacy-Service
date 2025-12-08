@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.jobs.retention import run_retention_cleanup
-from app.routes import admin, admin_policies_v1, consent, decision, preferences, region, retention, subject_requests, users
+from app.routes import admin, admin_policies_v1, auth, consent, decision, preferences, region, retention, subject_requests, users
 
 logger = logging.getLogger(__name__)
 _scheduler: Optional[BackgroundScheduler] = None
@@ -37,26 +37,37 @@ def _shutdown_scheduler() -> None:
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
     app = FastAPI(
         title="Consent & Privacy Preferences Service",
         version="1.0.0",
         description="Backend service for managing user consent and privacy preferences",
         debug=settings.DEBUG,
+        swagger_ui_parameters={"persistAuthorization": True, "displayRequestDuration": True, "tryItOutEnabled": True}
     )
     
     def custom_openapi():
-        if app.openapi_schema:
-            return app.openapi_schema
         from fastapi.openapi.utils import get_openapi
+        import time
         openapi_schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
-        openapi_schema["components"]["securitySchemes"] = {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key", "description": "Enter your API key (default: local-dev-key for local testing)"}}
-        for path in openapi_schema["paths"].values():
-            for method in path.values():
-                if isinstance(method, dict) and "security" not in method:
-                    method["security"] = [{"ApiKeyAuth": []}]
-        app.openapi_schema = openapi_schema
-        return app.openapi_schema
+        openapi_schema["info"]["x-cache-buster"] = str(int(time.time()))
+        openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})
+        if "HTTPBearer" in openapi_schema["components"]["securitySchemes"]:
+            scheme = openapi_schema["components"]["securitySchemes"]["HTTPBearer"]
+            scheme.update({"description": "JWT token from /auth/login or /auth/admin/login. Click 'Authorize' and paste token (without 'Bearer ' prefix).", "bearerFormat": "JWT", "type": "http", "scheme": "bearer"})
+        for path_key, path_item in openapi_schema["paths"].items():
+            if "/auth" in path_key or path_key in ["/", "/health"]:
+                continue
+            for method_key, method_item in path_item.items():
+                if isinstance(method_item, dict) and method_key.lower() in ["get", "post", "put", "delete", "patch"]:
+                    if "security" not in method_item:
+                        method_item["security"] = [{"HTTPBearer": []}]
+                    elif method_item.get("security"):
+                        for sec in method_item["security"]:
+                            if "BearerAuth" in sec:
+                                sec["HTTPBearer"] = sec.pop("BearerAuth")
+                    if "parameters" in method_item:
+                        method_item["parameters"] = [p for p in method_item["parameters"] if p.get("name", "").lower() != "authorization"]
+        return openapi_schema
     app.openapi = custom_openapi
 
     app.add_middleware(
@@ -89,16 +100,17 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
-        error_message = str(exc) if exc else "Invalid value"
+        error_message = str(exc) or "Invalid value"
         logger.warning(f"ValueError on {request.method} {request.url.path}: {error_message}")
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": error_message})
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        error_message = str(exc) if exc else "Unknown error"
+        error_message = str(exc) or "Unknown error"
         logger.exception(f"Unhandled exception on {request.method} {request.url.path}: {error_message}", exc_info=exc)
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": f"Internal server error: {error_message}"})
 
+    app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(consent.router)
     app.include_router(preferences.router)
@@ -119,14 +131,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", tags=["system"])
     def root():
-        """Root endpoint with service information."""
-        return {
-            "service": "Consent & Privacy Preferences Service",
-            "version": "1.0.0",
-            "status": "running",
-            "docs": "/docs",
-            "health": "/health"
-        }
+        return {"service": "Consent & Privacy Preferences Service", "version": "1.0.0", "status": "running", "docs": "/docs", "health": "/health"}
 
     @app.get("/health", tags=["system"])
     def health_check():

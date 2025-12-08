@@ -1,77 +1,52 @@
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.config import settings
-from app.db.database import Base, get_db
-from app.main import create_app
-from app.models.consent import RegionEnum
-
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-
-def _build_app():
-    app = create_app()
-    app.dependency_overrides[get_db] = override_get_db
-    return app
-
-
-def test_missing_api_key_returns_401():
-    app = _build_app()
-    with TestClient(app) as client:
-        response = client.post(
-            "/users",
-            json={"email": "missing@example.com", "region": RegionEnum.EU.value},
-        )
-        assert response.status_code == 401
-        assert response.json()["detail"] == "invalid_api_key"
-
-
-def test_wrong_api_key_returns_401():
-    app = _build_app()
-    with TestClient(app, headers={"X-API-Key": "wrong-key"}) as client:
-        response = client.post(
-            "/users",
-            json={"email": "wrong@example.com", "region": RegionEnum.EU.value},
-        )
-        assert response.status_code == 401
-
-
-def test_correct_api_key_allows_access():
-    app = _build_app()
-    with TestClient(app, headers={"X-API-Key": settings.API_KEY}) as client:
-        response = client.post(
-            "/users",
-            json={"email": "ok@example.com", "region": RegionEnum.EU.value},
-        )
-        assert response.status_code == 201
-        assert response.json()["email"] == "ok@example.com"
-
-
-def test_region_endpoint_remains_public():
-    app = _build_app()
-    with TestClient(app) as client:
-        response = client.get("/region", headers={"X-Forwarded-For": "8.8.8.8"})
+class TestUserAuth:
+    def test_login_success(self, client, test_user):
+        response = client.post("/auth/login", json={"email": "test@example.com", "password": "testpass"})
         assert response.status_code == 200
-        assert response.json()["region"] == RegionEnum.US.value
+        data = response.json()
+        assert "access_token" in data
+        assert data["role"] == "user"
+        assert data["user_id"] == str(test_user.id)
 
+    def test_login_invalid_credentials(self, client, test_user):
+        response = client.post("/auth/login", json={"email": "test@example.com", "password": "wrong"})
+        assert response.status_code == 401
+        assert response.json()["detail"] == "invalid_credentials"
+
+    def test_login_nonexistent_user(self, client):
+        response = client.post("/auth/login", json={"email": "noone@example.com", "password": "pass"})
+        assert response.status_code == 401
+
+
+class TestAdminAuth:
+    def test_admin_login_success(self, client, test_admin):
+        response = client.post("/auth/admin/login", json={"email": "admin@example.com", "password": "adminpass"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["role"] == "admin"
+
+    def test_admin_login_invalid(self, client, test_admin):
+        response = client.post("/auth/admin/login", json={"email": "admin@example.com", "password": "wrong"})
+        assert response.status_code == 401
+
+
+class TestJWTToken:
+    def test_protected_endpoint_with_token(self, client, test_user, auth_headers):
+        response = client.get(f"/users/{test_user.id}", headers=auth_headers)
+        assert response.status_code == 200
+
+    def test_protected_endpoint_no_token(self, client, test_user):
+        response = client.get(f"/users/{test_user.id}")
+        assert response.status_code == 401
+
+    def test_admin_endpoint_with_user_token(self, client, auth_headers):
+        response = client.get("/admin/audit", headers=auth_headers)
+        assert response.status_code == 403
+
+    def test_admin_endpoint_with_admin_token(self, client, admin_headers):
+        response = client.get("/admin/audit", headers=admin_headers)
+        assert response.status_code == 200
 

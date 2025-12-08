@@ -13,13 +13,11 @@ from app.utils.helpers import get_utc_now
 def _mark_expired_consents(db: Session) -> int:
     now = get_utc_now()
     expired_consents = db.query(ConsentHistory).filter(ConsentHistory.status == StatusEnum.GRANTED, ConsentHistory.valid_until.isnot(None), ConsentHistory.valid_until <= now).all()
-    count = 0
     for consent in expired_consents:
         consent.status = StatusEnum.EXPIRED
-        count += 1
-    if count > 0:
+    if expired_consents:
         db.commit()
-    return count
+    return len(expired_consents)
 
 
 def _delete_stale_consents(db: Session, cutoff) -> int:
@@ -31,16 +29,14 @@ def _delete_stale_subject_requests(db: Session, cutoff) -> int:
 
 
 def _anonymize_user_emails(db: Session, cutoff) -> int:
-    stale_users: List[User] = db.query(User).filter(User.updated_at < cutoff).all()
+    stale_users = db.query(User).filter(User.updated_at < cutoff).all()
     now = get_utc_now()
     changed = 0
     for user in stale_users:
-        if user.email.startswith("anon-"):
-            continue
-        digest = hashlib.sha256(f"{user.id}:{user.email}".encode("utf-8")).hexdigest()[:12]
-        user.email = f"anon-{digest}"
-        user.updated_at = now
-        changed += 1
+        if not user.email.startswith("anon-"):
+            user.email = f"anon-{hashlib.sha256(f'{user.id}:{user.email}'.encode('utf-8')).hexdigest()[:12]}"
+            user.updated_at = now
+            changed += 1
     return changed
 
 
@@ -59,23 +55,23 @@ def run_retention_cleanup(db: Optional[Session] = None) -> Dict[str, object]:
             session.add(AuditLog(user_id=None, actor_type="system", event_type="retention_run", action="consent_expiry_processed", details={"expired_count": expired_count}, event_time=now, created_at=now))
         rules = session.query(RetentionRule).all()
         if not rules:
-            entity_type_mapping = {RetentionEntityEnum.CONSENT.value: RetentionEntityTypeEnum.CONSENT_RECORD.value, RetentionEntityEnum.AUDIT.value: RetentionEntityTypeEnum.AUDIT_LOG_ENTRY.value, RetentionEntityEnum.USER.value: RetentionEntityTypeEnum.CONSENT_RECORD.value}
-            schedule_rules = session.query(RetentionSchedule).filter(RetentionSchedule.active.is_(True)).all()
-            rules = [type('RuleProxy', (), {'entity_type': type('Enum', (), {'value': entity_type_mapping.get(r.entity_type.value, RetentionEntityTypeEnum.CONSENT_RECORD.value)})(), 'retention_period_days': r.retention_days})() for r in schedule_rules]
+            entity_map = {RetentionEntityEnum.CONSENT.value: RetentionEntityTypeEnum.CONSENT_RECORD.value, RetentionEntityEnum.AUDIT.value: RetentionEntityTypeEnum.AUDIT_LOG_ENTRY.value, RetentionEntityEnum.USER.value: RetentionEntityTypeEnum.CONSENT_RECORD.value}
+            schedules = session.query(RetentionSchedule).filter(RetentionSchedule.active.is_(True)).all()
+            rules = [type('RuleProxy', (), {'entity_type': type('Enum', (), {'value': entity_map.get(s.entity_type.value, RetentionEntityTypeEnum.CONSENT_RECORD.value)})(), 'retention_period_days': s.retention_days})() for s in schedules]
         results: List[Dict[str, object]] = []
         total_deleted = 0
         for rule in rules:
             cutoff = now - timedelta(days=rule.retention_period_days)
-            deleted_count = 0
             entity_type_value = rule.entity_type.value if hasattr(rule.entity_type, 'value') else rule.entity_type if isinstance(rule.entity_type, str) else str(rule.entity_type)
-            entity_types = {RetentionEntityTypeEnum.CONSENT_RECORD.value, "ConsentRecord", RetentionEntityEnum.CONSENT.value, "consent"}
-            if entity_type_value in entity_types:
-                deleted_count += _delete_stale_consents(session, cutoff)
-                deleted_count += _delete_stale_subject_requests(session, cutoff)
+            consent_types = {RetentionEntityTypeEnum.CONSENT_RECORD.value, "ConsentRecord", RetentionEntityEnum.CONSENT.value, "consent"}
+            if entity_type_value in consent_types:
+                deleted_count = _delete_stale_consents(session, cutoff) + _delete_stale_subject_requests(session, cutoff)
             elif entity_type_value in (RetentionEntityTypeEnum.RIGHTS_REQUEST.value, "RightsRequest"):
-                deleted_count += _delete_stale_subject_requests(session, cutoff)
+                deleted_count = _delete_stale_subject_requests(session, cutoff)
             elif entity_type_value in (RetentionEntityEnum.USER.value, "user"):
                 deleted_count = _anonymize_user_emails(session, cutoff)
+            else:
+                deleted_count = 0
             details = {"rule": str(rule.entity_type), "deleted_count": deleted_count, "cutoff_date": cutoff.isoformat()}
             session.add(AuditLog(user_id=None, actor_type="system", event_type="retention_run", action="retention.cleanup", details=details, event_time=now, created_at=now))
             results.append(details)

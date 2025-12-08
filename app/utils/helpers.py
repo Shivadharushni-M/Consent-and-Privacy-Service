@@ -1,10 +1,9 @@
 from datetime import datetime, timezone
-from typing import Dict, Union
+from typing import Dict, Optional, Union
+from uuid import UUID
 from fastapi import Request
 from app.models.consent import RegionEnum
-
-_GDPR_REGIONS = {RegionEnum.EU, RegionEnum.INDIA, RegionEnum.UK, RegionEnum.IN}
-_LGDP_REGIONS = {RegionEnum.BR}
+from app.utils.security import Actor
 
 
 def get_utc_now() -> datetime:
@@ -32,6 +31,8 @@ def extract_client_ip(request: Request) -> str:
 
 
 def build_policy_snapshot(region: Union[str, RegionEnum]) -> Dict[str, Union[str, bool]]:
+    _GDPR_REGIONS = {RegionEnum.EU, RegionEnum.INDIA, RegionEnum.UK, RegionEnum.IN}
+    _LGDP_REGIONS = {RegionEnum.BR}
     region_value = validate_region(region)
     if region_value in _GDPR_REGIONS:
         policy, requires_explicit, default = "gdpr", True, "deny"
@@ -42,3 +43,14 @@ def build_policy_snapshot(region: Union[str, RegionEnum]) -> Dict[str, Union[str
     else:
         policy, requires_explicit, default = "global", False, "allow"
     return {"region": region_value.value, "policy": policy, "requires_explicit": requires_explicit, "default": default}
+
+
+def get_audit_log_kwargs(actor: Optional[Union["User", Actor]], user_id: Optional[UUID] = None) -> Dict[str, Optional[Union[str, UUID]]]:
+    from app.models.consent import User
+    if actor is None:
+        return {"user_id": user_id, "actor_type": None}
+    elif isinstance(actor, Actor):
+        return {"user_id": None if actor.role == "admin" else actor.id, "actor_type": "admin" if actor.role == "admin" else None}
+    elif isinstance(actor, User):
+        return {"user_id": actor.id, "actor_type": None}
+    return {"user_id": user_id, "actor_type": None}

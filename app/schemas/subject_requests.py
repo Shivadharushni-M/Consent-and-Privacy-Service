@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 from app.models.consent import RegionEnum, RequestStatusEnum, RequestTypeEnum
 from app.schemas.consent import ConsentResponse
 
@@ -8,8 +8,7 @@ from app.schemas.consent import ConsentResponse
 class SubjectRequestIn(BaseModel):
     user_id: UUID
     request_type: RequestTypeEnum
-    new_email: EmailStr | None = None
-    new_region: RegionEnum | None = None
+    region: RegionEnum | None = None
 
 
 class SubjectRequestOut(BaseModel):

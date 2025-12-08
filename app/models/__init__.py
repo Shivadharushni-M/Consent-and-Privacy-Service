@@ -1,3 +1,4 @@
+from app.models.admin import Admin
 from app.models.audit import ActorTypeEnum, AuditLog, EventTypeEnum
 from app.models.consent import (
     ConsentHistory,
@@ -15,6 +16,7 @@ from app.models.retention import RetentionJob, RetentionJobStatusEnum, Retention
 from app.models.tokens import TokenPurposeEnum, VerificationToken
 
 __all__ = [
+    "Admin",
     "ActorTypeEnum",
     "AuditLog",
     "ConsentHistory",

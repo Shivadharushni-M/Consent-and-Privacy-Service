@@ -3,15 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    Enum as SQLEnum,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-)
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -83,23 +75,14 @@ class User(Base):
     external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    api_key: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     primary_identifier_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     primary_identifier_value: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    region: Mapped[RegionEnum] = mapped_column(
-        SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
+    region: Mapped[RegionEnum] = mapped_column(SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     consent_history: Mapped[List["ConsentHistory"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -117,33 +100,15 @@ class ConsentHistory(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    purpose: Mapped[PurposeEnum] = mapped_column(
-        SQLEnum(PurposeEnum, name="purpose_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
-    )
-    status: Mapped[StatusEnum] = mapped_column(
-        SQLEnum(StatusEnum, name="status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
-    region: Mapped[RegionEnum] = mapped_column(
-        SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
-    granted_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    valid_from: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-    valid_until: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
-    policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONBType, nullable=True
-    )
+    purpose: Mapped[PurposeEnum] = mapped_column(SQLEnum(PurposeEnum, name="purpose_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    status: Mapped[StatusEnum] = mapped_column(SQLEnum(StatusEnum, name="status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False)
+    region: Mapped[RegionEnum] = mapped_column(SQLEnum(RegionEnum, name="region_enum", values_callable=lambda x: [e.value for e in x]), nullable=False)
+    granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    policy_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONBType, nullable=True)
     source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
@@ -160,12 +125,7 @@ class RetentionSchedule(Base):
     __tablename__ = "retention_schedules"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    entity_type: Mapped[RetentionEntityEnum] = mapped_column(
-        SQLEnum(RetentionEntityEnum, name="retention_entity_enum", values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
+    entity_type: Mapped[RetentionEntityEnum] = mapped_column(SQLEnum(RetentionEntityEnum, name="retention_entity_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, unique=True, index=True)
     retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -178,21 +138,10 @@ class SubjectRequest(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    request_type: Mapped[RequestTypeEnum] = mapped_column(
-        SQLEnum(RequestTypeEnum, name="request_type_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
-    )
-    status: Mapped[RequestStatusEnum] = mapped_column(
-        SQLEnum(RequestStatusEnum, name="request_status_enum", values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
-        default=RequestStatusEnum.PENDING,
-        index=True,
-    )
-    requested_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    request_type: Mapped[RequestTypeEnum] = mapped_column(SQLEnum(RequestTypeEnum, name="request_type_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    status: Mapped[RequestStatusEnum] = mapped_column(SQLEnum(RequestStatusEnum, name="request_status_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, default=RequestStatusEnum.PENDING, index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     verification_token_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         GUID, ForeignKey("verification_tokens.id"), nullable=True, index=True
     )
@@ -203,6 +152,4 @@ class SubjectRequest(Base):
     user: Mapped["User"] = relationship(back_populates="subject_requests")
 
     __table_args__ = (Index("idx_user_request_type", "user_id", "request_type"),)
-
-
 
