@@ -43,7 +43,7 @@ def _detect_with_maxmind(ip: str) -> Optional[RegionEnum]:
         iso_code = (_GEOIP_READER.country(ip).country.iso_code or "").upper()
         return _map_iso_to_region(iso_code) if iso_code else None
     except Exception:
-    return None
+        return None
 
 
 def _map_iso_to_region(iso_code: Optional[str]) -> RegionEnum:
@@ -61,7 +61,7 @@ def _map_iso_to_region(iso_code: Optional[str]) -> RegionEnum:
     try:
         return RegionEnum(normalized_iso)
     except ValueError:
-    return RegionEnum.ROW
+        return RegionEnum.ROW
 
 
 def _is_local_ip(ip: str) -> bool:
