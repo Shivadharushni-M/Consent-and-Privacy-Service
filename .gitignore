@@ -1,15 +1,12 @@
-
 __pycache__/
 
 .pytest_cache/
-
-
 
 env/
 venv/
 ENV/
 .venv
 
-
 .env
 
+app/geoip/*.mmdb
